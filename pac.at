@@ -8,5 +8,7 @@ api: "rust"
 desktop: "true"
 
 dep stylekit {
-    path: "../stylekit"
+    path: "vendor/stylekit"
 }
+front_port: 17822
+back_port: 17823
