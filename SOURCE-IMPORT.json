@@ -1,0 +1,111 @@
+{
+  "repository": "auto-chat",
+  "date": "2026-10-03",
+  "sources": [
+    {
+      "repo": "auto-lang",
+      "commit": "17292c07e792e80d4e4da5495fc3fc2917e8aa1e",
+      "path": "examples/ui/017-chat",
+      "primary": true,
+      "fileCount": 17,
+      "pacFields": {
+        "name": "chat",
+        "version": "1.0.0",
+        "scene": "ui",
+        "render": "vue",
+        "title": "Chat",
+        "title_zh": "聊天",
+        "api": "rust",
+        "desktop": "true"
+      },
+      "files": [
+        {
+          "sourcePath": "examples/ui/017-chat/README.md",
+          "path": "README.md",
+          "sha256": "215d12fc3dd9ab31b11e9d581659591653fcca788e49b741a4a03a7395d2ddf5"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/pac.at",
+          "path": "pac.at",
+          "sha256": "0a97c7872b6c0b8b5ac395caea5564ffb103f32606ede0f610ee0b1560b05858"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/back/api.at",
+          "path": "src/back/api.at",
+          "sha256": "4430a679f76f68edb3698ced0ff9717a8c25fb2e61aa1a0b4d1ac31d3ed35ec2"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/back/db.at",
+          "path": "src/back/db.at",
+          "sha256": "decfdb2533f491df3308a4395b665eac81d730d4ba84e12e275330b36cc75deb"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/front/app.at",
+          "path": "src/front/app.at",
+          "sha256": "b768af58306262f5f3141ae2bcbced9daadf1e4f8946af9b1e5851c63747915f"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/front/chat_sidebar.at",
+          "path": "src/front/chat_sidebar.at",
+          "sha256": "08e7b105a8004dadbc0ea26cc57c2fbfc91b3c1ebfa2355b19e024f95797b476"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/front/chat_store.at",
+          "path": "src/front/chat_store.at",
+          "sha256": "7695e2dac2aad500bb6afa3b60ae8e1e96bac38cf3498715ced4e974f1d7b998"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/front/composer.at",
+          "path": "src/front/composer.at",
+          "sha256": "514effb15062ac82b908d066d2121d0e82db74b2c4bbabf74e9c6c2fe0f772c4"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/front/message_thread.at",
+          "path": "src/front/message_thread.at",
+          "sha256": "388e07a484668813b9f3eea66937989c542aa856f7b3db8291a6d8fce54fb12c"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/src/front/types.at",
+          "path": "src/front/types.at",
+          "sha256": "617f92437f9d083b99e230cb2052e450a26c9d71c1ec2acd1a48a9cfccadb6fa"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/tests/acceptance.atd",
+          "path": "tests/acceptance.atd",
+          "sha256": "26bd0ade7d62fc83041261d1caf1b179231af2a4230ef49f93881578c2de6b73"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/tests/package.json",
+          "path": "tests/package.json",
+          "sha256": "077117a65f1c3931df7c440f5c5ef4149ce9902da17d1d42bb70ccf9a85b68d5"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/tests/playwright-report/index.html",
+          "path": "tests/playwright-report/index.html",
+          "sha256": "e284ea007de62fd671db663e29d8a5027744042ddd4c30abce7454e94ee11d55"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/tests/playwright.config.ts",
+          "path": "tests/playwright.config.ts",
+          "sha256": "d50360ce0f807a06673468aee5b026de5a8050d1d0e7341fe5b9f3ee38f7305c"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/tests/pnpm-lock.yaml",
+          "path": "tests/pnpm-lock.yaml",
+          "sha256": "affb484de69571d4a20496d73a380e407d6c106796cde5f354b322cd56c9a3d3"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/tests/smoke.spec.ts",
+          "path": "tests/smoke.spec.ts",
+          "sha256": "312b646c6e0da732a1d8de0783a57ee318bbdd6e5cdd6add46569295d7a8b8ad"
+        },
+        {
+          "sourcePath": "examples/ui/017-chat/tests/vm-smoke.mjs",
+          "path": "tests/vm-smoke.mjs",
+          "sha256": "715bc9a757af616a36a165b80cec21c24df79bc7b0cb50d773d2adecd3f9238d"
+        }
+      ]
+    }
+  ],
+  "note": "Exact committed source snapshots; packaging changes follow in a separate commit. References are not additional installed apps."
+}
