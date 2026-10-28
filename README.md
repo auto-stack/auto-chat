@@ -27,5 +27,5 @@ AutoOS 通过 [`apps/017-chat`](https://github.com/auto-stack/auto-os/tree/v0.6-
 
 ## 基本能力补齐计划（2026-10-29）
 
-[CHAT-001：真实会话、消息通道与历史恢复](docs/plans/001-real-conversations.md) 为本app的基础能力执行合同，目前为 drafting，未实施。
+[CHAT-001：真实会话、消息通道与历史恢复](docs/plans/001-real-conversations.md) 为本app的基础能力执行合同，目前为 drafting/r2，用户已确认人与人聊天并沿用联系人界面；未实施。
 总状态与前置见 [AutoOS B类总跟踪表](../../docs/plans/b-apps-basic-capabilities.md)。基础能力通过后再考虑Linux；A类统一等待 auto-os-distro 完成 Nix＋COSMIC 基础，后续增强另会话。
