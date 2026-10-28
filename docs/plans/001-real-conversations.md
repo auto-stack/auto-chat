@@ -5,7 +5,7 @@ feature_name: real-conversations
 author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
-plan_revision: 2
+plan_revision: 3
 current_step: 0
 total_steps: 7
 supersedes_spec_components: []
@@ -29,11 +29,11 @@ touched_goals: []
 
 ## 2. 架构方案
 
-应用逻辑继续纯 `.at`，前端/后端沿 AutoUI 现有结构；本仓为主导仓。应用工作检出固定 `D:/autostack/auto-os/apps/auto-chat`，工作分支 `main`；执行/复审共用此检出，一个写入者。**不新建app外部worktree或clone，不建任何junction/symlink**。框架缺口在实际owner仓另立前置并按其worktree纪律执行，不在app手写Rust、修改生成Rust或绕过公开SDK。
+应用逻辑继续纯 `.at`，前端/后端沿 AutoUI 现有结构；本仓为主导仓。应用工作检出固定 `D:/autostack/auto-chat`（独立开发clone），工作分支 `main`；执行/复审共用此检出，一个写入者。**复用该独立clone，不在组合子模块内并行开发，不建任何junction/symlink**。框架缺口在实际owner仓另立前置并按其worktree纪律执行，不在app手写Rust、修改生成Rust或绕过公开SDK。
 
 使用稳定 conversation_id/message_id、发送/失败/确认状态与本地历史模型，不同会话不串消息。保留联系人界面，明确本端身份、联系人唯一标识和当前连接目标；两个独立客户端以各自身份通过真实通道互通，消息归属不信任任意前端sender字段。T-01调查既有服务、受支持中继/协议与SSE调用链，选择可验证的一条最小连接profile，说明地址、身份/访问控制、消息送达语义、重连与退出恢复。凭据不硬编码或写进导出/测试证据。
 
-跨仓总表：[B类基本能力总跟踪表](../../../../docs/plans/b-apps-basic-capabilities.md)。源Spec以所属仓 `docs/specs/` 为准；当前没有该app的canonical模块规范，旧根 `SPEC.md`（如有）只是历史Demo观察/再生描述，不能据此宣布真实功能已完成。新规范路径将在实际复审/merge后落地，本轮不写入已实现Spec。
+跨仓总表：[B类基本能力总跟踪表](https://github.com/auto-stack/auto-os/blob/main/docs/plans/b-apps-basic-capabilities.md)。源Spec以所属仓 `docs/specs/` 为准；当前没有该app的canonical模块规范，旧根 `SPEC.md`（如有）只是历史Demo观察/再生描述，不能据此宣布真实功能已完成。新规范路径将在实际复审/merge后落地，本轮不写入已实现Spec。
 
 ## 3. 技术栈
 
@@ -42,6 +42,8 @@ Auto / AutoUI、当前匹配的AutoLang/AutoUI/AutoMan工具组合、各app已�
 ## 4. 需求分析与背景调查
 
 授权：用户于2026-10-29要求建立总跟踪表、复用Notes/Reader/Blog现有计划，并为其余B类应用准备基本能力补齐计划。此处授权的是**计划准备和必要的文档/组合版本登记**，不宣称已授权/完成本计划具体功能实现，不推定全量竞品复刻或Linux开发已启动。
+
+2026-10-29用户明确改用 `D:/autostack/<产品仓名>` 独立clone开发，先push应用再更新子模块pin；此修订仅更新工作位置、跨仓链接和交付状态描述，功能目标、T-01..07依赖、work验收与Spec增量不变，不重置任务。旧开发位置被此用户决定替代。
 
 冻结的观察基线：`8df3f33b3bfedc123287d4324b5e67ae5b00a724`（在本app `main` fetch origin后ff核对）；执行前重新核对HEAD/pin/WIP并记录变化。主产品统计为27个去重产品，B类9个；AutoJade旧名Jade Garden不重复计数。
 
@@ -98,7 +100,7 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 | AC-03 | work | 隔离与持久化：至少两个会话不串消息；中文/换行历史和发送状态在退出重开后按合同恢复；已确认消息重试不重复落库。 |
 | AC-04 | work | 失败与双端：超时/断网/无效凭据/存储失败有真实状态且编辑可恢复；Vue/VM各完成一次真实交互和历史重开。凭据不进入日志/导出。 |
 | AC-05 | review | 冻结已提交实现与依赖，逐个重验AC-01..04和独立反例；核对SD-01/02与范围、实际证据，输出明确review结论；未闭项不可忽略。 |
-| AC-06 | merge | 通过对应最终门后交付main并推送，父仓gitlink和组合验证可追溯；canonical/ledger/归档收尾完成，app显式detached；总表有证据地标A，A类Linux仍等待发行版前置。 |
+| AC-06 | merge | 通过对应最终门后交付main并推送，父仓gitlink和组合验证可追溯；canonical/ledger/归档收尾完成，组合子模块显式detached，独立开发clone留在main；总表有证据地标A，A类Linux仍等待发行版前置。 |
 
 ## 8. 执行步骤
 
@@ -108,12 +110,14 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 - [ ] T-04（owner_stage=work；依赖 T-03；AC-01..04）：前端真实会话：chat_store.at/composer.at以稳定身份路由，发送失败保留或可恢复输入；普通启动不出现Alice/Bob假用户或固定bot回复，测试fixture显式隔离。
 - [ ] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
 - [ ] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
-- [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，app显式detach。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
+- [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
 
 ## 9. 复审记录
 
 - r1历史：`9ad521528368cb9389f1068ad7347843cc687419`保存待身份决策草案。2026-10-29用户答复“人与人聊天（沿现有联系人界面）”，r1阻塞已解除，历史双路线合同被r2替代。
-- stage: new | plan_id: CHAT-001 | plan_revision: 2 | outcome: pass（人际定位已确认；草案就绪，能力探针/实现未执行） | next: work/T-01（另行执行）。
+- 历史 r2起草回执见 `b2597f21dd6bc9fff87ecf589c877f771b722b75`；其开发位置/收尾状态描述由本次修订替代，既有功能与验收合同保留。
+- stage: new | plan_id: CHAT-001 | plan_revision: 3 | outcome: pass（独立clone路径修订就绪；功能未实施/未验收） | next: work/T-01（另行执行）。
+- 本次只改工作位置、跨仓链接与AC-06/T-07的检出收尾说明，不变更基础能力要求；独立clone开发，组合子模块只固定已交付版本。
 - r2变更：目标/架构、V-03、AC-01/02、T-01..04固定为人际聊天，保留联系人界面；不再等待同一产品定位确认。
 - 本轮核对源码/Spec缺口、历史任务、路径、基线和计划唯一性；未执行实现/功能测试，所有7项任务保持未勾选；通过的是草案结构/相互引用检查，不是产品验收。
 
