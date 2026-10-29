@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
 plan_revision: 3
-current_step: 5
+current_step: 7
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/chat/basic-capabilities.md]
@@ -109,8 +109,8 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 - [x] T-03（owner_stage=work；依赖 T-02；AC-01..04）：真实通道与状态：按T-01已验证的唯一连接profile接真实人际收发；发送/重试/失败/确认状态真实，重试不重复插入已确认消息；明确生命周期与退出恢复。
 - [x] T-04（owner_stage=work；依赖 T-03；AC-01..04）：前端真实会话：chat_store.at/composer.at以稳定身份路由，发送失败保留或可恢复输入；普通启动不出现Alice/Bob假用户或固定bot回复，测试fixture显式隔离。
 - [x] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
-- [ ] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
-- [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
+- [x] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
+- [x] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
 
 ## 9. 复审记录
 
