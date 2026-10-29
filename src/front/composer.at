@@ -1,6 +1,6 @@
-// composer.at — enhanced input bar with emoji picker and quick chips.
-// DoSend msg avoids name collision with on_send callback (Gotcha U21).
-// Input sync via value: .draft two-way binding; on_typing triggered via inline lambda.
+// composer.at — 输入栏：emoji 追加 + 快捷短语 + 发送/回车。
+// DoSend msg 避免与 on_send 回调命名冲突（Gotcha U21）；draft 本地双向绑定，
+// 发送即清空；失败恢复由消息流中的失败气泡（点击重发）承担。
 style emoji_react = "text-base p-1 bg-transparent hover:scale-125 transition-transform border-0 cursor-pointer select-none"
 style quick_reply = "text-xs px-2.5 py-1 bg-muted hover:bg-muted/80 text-foreground rounded-lg transition-colors border border-border/40 font-medium"
 
@@ -10,7 +10,7 @@ widget Composer(on_send: msg, on_typing: msg) {
     view {
         col {
             style: "p-3 bg-card rounded-xl shadow-sm border border-border gap-2"
-            // Emoji toolbar & quick action chips
+            // Emoji 工具条 & 快捷短语
             row {
                 style: "items-center justify-between gap-2 overflow-x-auto pb-1"
                 row {
@@ -22,25 +22,25 @@ widget Composer(on_send: msg, on_typing: msg) {
                     button "🎉" { onclick: .InsertEmoji("🎉"), style: emoji_react }
                     button "🔥" { onclick: .InsertEmoji("🔥"), style: emoji_react }
                     button "🚀" { onclick: .InsertEmoji("🚀"), style: emoji_react }
-                    button "🤖" { onclick: .InsertEmoji("🤖"), style: emoji_react }
+                    button "👋" { onclick: .InsertEmoji("👋"), style: emoji_react }
                 }
                 row {
                     style: "items-center gap-1.5 flex-shrink-0"
-                    button "Hello! 👋" { onclick: .SendQuick("Hello! 👋"), style: quick_reply }
-                    button "Got it! 👍" { onclick: .SendQuick("Got it! 👍"), style: quick_reply }
+                    button "你好！👋" { onclick: .SendQuick("你好！👋"), style: quick_reply }
+                    button "收到！👍" { onclick: .SendQuick("收到！👍"), style: quick_reply }
                 }
             }
-            // Input row
+            // 输入行
             row {
                 style: "items-center gap-2"
                 input {
-                    placeholder: "Type a message..."
+                    placeholder: "输入消息…"
                     value: .draft
-                    oninput: () => { on_typing("You") }
+                    oninput: () => { on_typing() }
                     onenter: .DoSend
                     style: "flex-1 px-4 py-2 bg-background border border-border rounded-xl text-sm text-foreground outline-none focus:border-primary transition-colors shadow-xs"
                 }
-                button "Send" {
+                button "发送" {
                     onclick: .DoSend
                     style: "px-5 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold shadow-xs hover:bg-primary/90 transition-colors"
                 }

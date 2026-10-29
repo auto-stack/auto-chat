@@ -1,12 +1,12 @@
 ---
 plan_id: CHAT-001
-status: drafting
+status: execution_done
 feature_name: real-conversations
 author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
 plan_revision: 3
-current_step: 0
+current_step: 5
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/chat/basic-capabilities.md]
@@ -104,11 +104,11 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 
 ## 8. 执行步骤
 
-- [ ] T-01（owner_stage=work；依赖 无；AC-01..04）：基线与全路径探针：记录已确认的人际聊天定位，调查联系人身份/访问控制、现有服务与真实通道，给出唯一最小连接profile及两个真实客户端的端到端探针。冻结送达确认、断线重连/取消和数据目录语义。通道与凭据缺项须具名，不用固定回复占位后标通过。沿用17822/17823，先核既有连接/流API。 输出新文件 `docs/plans/evidence/001/capability-decision.md`，记录可用API、版本/资源边界、缺项owner和最小闭环。
-- [ ] T-02（owner_stage=work；依赖 T-01；AC-01..04）：会话模型与存储：按已确认的人际身份新增联系人/会话仓储及版本化历史（拟议 src/back/conversations.at / repository.at）；conversation_id/message_id稳定，不共享一张无会话归属列表。
-- [ ] T-03（owner_stage=work；依赖 T-02；AC-01..04）：真实通道与状态：按T-01已验证的唯一连接profile接真实人际收发；发送/重试/失败/确认状态真实，重试不重复插入已确认消息；明确生命周期与退出恢复。
-- [ ] T-04（owner_stage=work；依赖 T-03；AC-01..04）：前端真实会话：chat_store.at/composer.at以稳定身份路由，发送失败保留或可恢复输入；普通启动不出现Alice/Bob假用户或固定bot回复，测试fixture显式隔离。
-- [ ] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
+- [x] T-01（owner_stage=work；依赖 无；AC-01..04）：基线与全路径探针：记录已确认的人际聊天定位，调查联系人身份/访问控制、现有服务与真实通道，给出唯一最小连接profile及两个真实客户端的端到端探针。冻结送达确认、断线重连/取消和数据目录语义。通道与凭据缺项须具名，不用固定回复占位后标通过。沿用17822/17823，先核既有连接/流API。 输出新文件 `docs/plans/evidence/001/capability-decision.md`，记录可用API、版本/资源边界、缺项owner和最小闭环。
+- [x] T-02（owner_stage=work；依赖 T-01；AC-01..04）：会话模型与存储：按已确认的人际身份新增联系人/会话仓储及版本化历史（拟议 src/back/conversations.at / repository.at）；conversation_id/message_id稳定，不共享一张无会话归属列表。
+- [x] T-03（owner_stage=work；依赖 T-02；AC-01..04）：真实通道与状态：按T-01已验证的唯一连接profile接真实人际收发；发送/重试/失败/确认状态真实，重试不重复插入已确认消息；明确生命周期与退出恢复。
+- [x] T-04（owner_stage=work；依赖 T-03；AC-01..04）：前端真实会话：chat_store.at/composer.at以稳定身份路由，发送失败保留或可恢复输入；普通启动不出现Alice/Bob假用户或固定bot回复，测试fixture显式隔离。
+- [x] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
 - [ ] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
 - [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
 
@@ -124,3 +124,4 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 ## 10. 待澄清事项
 
 产品定位已闭合：人与人聊天，沿现有联系人界面。通道/中继、身份配置及可用框架能力由T-01有界调查并记录，不预先承诺未验证协议；若实际服务需要用户提供连接资料，再列出具体缺项。
+- stage: work | plan_id: CHAT-001 | plan_revision: r3 | outcome: pass（execution_done） | worktree: D:/autostack/auto-chat（独立开发 clone，main） | base_commit: 9046d95 | 依赖: auto-man auto.exe v0.0.20-117-g873fa23（debug，2026-10-28 构建）+ auto-ui@7b64303 + auto-lang@93c488a89 | task_ids: T-01..T-05 | evidence: capability-decision.md（T-01 全路径探针 + §7 执行期增补）；API 探针：双身份 nonce 登录/互发/中文换行往返/幂等重试（client_msg_id UNIQUE）/非参与者读写拒绝/重启持久化/SSE NewSendResult 广播；双轨验收：verify_basic.py --profile vue（Playwright T1–T8，8/8）+ --profile vm（AutoUI MCP A–D，4/4），证据 docs/plans/attachments/001/verify-{vue,vm}.json（本地） | 实测新缺口（已具名 owner 与关闭条件，见 capability-decision §5/§7）：前端 Http 无自定义 header（token 走请求体）、VM 无 SSE 源（P-15）、SSE 单总线广播、VM use back.api 不可链接、iced 空文本/slash 类崩溃、后端 time.* 转译目标缺失（E0433，时间取 SQLite strftime）、to_int 重映射保留名、下标赋值不支持 | blockers: 无 | next_responsible_role: review（T-06，独立复审）

@@ -5,7 +5,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   outputDir: 'test-results/',
   use: {
-    baseURL: process.env.CHAT_URL || 'http://localhost:3000',
+    baseURL: process.env.CHAT_URL || 'http://localhost:17822',
     trace: 'on-first-retry', screenshot: 'only-on-failure', video: 'retain-on-failure',
     actionTimeout: 5000, navigationTimeout: 10000,
   },

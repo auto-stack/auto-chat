@@ -1,64 +1,171 @@
-// api.at — Chat API (Plan 544: WeChat-style multi-contact & bot enhancements).
-// CRUD message endpoints + contacts list + bot reply + SSE stream.
+// api.at — CHAT-001 v2：真实人与人聊天 API。
+// 连接 profile 冻结于 docs/plans/evidence/001/capability-decision.md：
+// 单共享后端 + 双独立客户端（token 请求体携带、服务器侧 sender 归属、
+// SSE 广播 + 轮询兜底、SQLite 持久化）。端点体一律 `return db.FN(args)`
+// 薄委托（codegen resolve_db_call 契约，Plan 399 §8）。
+//
+// 广播约定（auto-api-gen）：POST 返回声明类型 T → 广播 {"event":"New<T>",...T}
+// 给全部订阅者；void POST 仅 set_typing（名含 typing）广播 {"event":"Typing",
+// "name":<第一个str体参数>}，其余 void POST 不广播。
 
+pub type Identity = {
+    id: str
+    name: str
+    avatar: str
+    online: bool
+}
+
+/// GET /api/me 专用：唯一允许携带 token 的响应（不进任何广播）。
+pub type MeInfo = {
+    id: str
+    name: str
+    avatar: str
+    token: str
+}
+
+/// POST /api/login 应答 + NewLoginAck 广播载荷（不含 token，兼作在线名单变更信号）。
+pub type LoginAck = {
+    id: str
+    name: str
+    avatar: str
+}
+
+/// 侧栏会话摘要（沿用 Contact 界面形状；id = conversation_id，name/avatar = 对端）。
 pub type Contact = {
     id: str
     name: str
     avatar: str
     status: str
+    peer_id: str
     last_message: str
     time: str
     unread: int
 }
 
+pub type Conversation = {
+    id: str
+    peer_id: str
+    peer_name: str
+    peer_avatar: str
+}
+
+/// 消息。气泡方向由客户端以 sender_id == 本端 id 派生（服务器不再存 mine）；
+/// time 为服务器生成的相对时间串（免时区合同，展示专用）。
 pub type Message = {
     id: int
+    conversation_id: str
+    sender_id: str
     sender: str
     text: str
     time: str
-    mine: bool
+    created_sec: int
+    client_msg_id: str
 }
 
-// SSE event union. resolve_stream_variants reads this to wire the frontend
-// dispatch (new_message -> NewMessage, typing -> Typing).
+/// 发送应答：ok=false 携带 err（unauthorized/not-a-participant/empty）。
+/// 广播 NewSendResult 兼作 Vue 轨对端的实时送达（含整条消息）。
+pub type SendResult = {
+    ok: bool
+    err: str
+    message: Message
+}
+
+/// SSE 事件联合（codegen resolve_stream_variants 按变体派发到 store 同名 handler；
+/// 未声明事件静默忽略）。
 pub tag ChatEvent {
-    NewMessage(Message),
-    Typing(str),
+    NewSendResult(SendResult),
+    NewLoginAck(LoginAck),
+    Typing(TypingSignal),
+}
+
+/// Typing 广播载荷（codegen 约束：仅第一个 str 体参数进 name 字段）。
+pub type TypingSignal = {
+    name: str
+}
+
+/// 客户端待确认消息（前端 pending 视图；服务器不持久化此形状）。
+pub type PendingMsg = {
+    client_msg_id: str
+    text: str
+    state: str
 }
 
 use db
 
+/// POST /api/login — 按名 find-or-create 身份并重签 token；nonce 为客户端
+/// 生成的 ASCII 一次性认领凭据（VM 轨 GET Unicode query 编码不可靠实测，
+/// 故 token 认领走 ASCII nonce 而非名字 query）。广播 NewLoginAck（无 token）。
+#[api(method = "POST", path = "/api/login")]
+pub fn login(name str, nonce str) LoginAck {
+    return db.login(name, nonce)
+}
+
+/// GET /api/me?nonce= — 按一次性 nonce 认领本端身份与 token（仅 GET 响应
+/// 携带 token，不广播；认领后 pending 失效，同名重登重发 nonce 即可）。
+#[api(method = "GET", path = "/api/me")]
+pub fn me(nonce str) MeInfo {
+    return db.me(nonce)
+}
+
+/// GET /api/identities — 已注册身份公开视图（无 token），online = 15s 内有心跳。
+#[api(method = "GET", path = "/api/identities")]
+pub fn identities() []Identity {
+    return db.identities()
+}
+
+/// POST /api/heartbeat — 刷新在线状态（void，不广播）。
+#[api(method = "POST", path = "/api/heartbeat")]
+pub fn heartbeat(token str) {
+    return db.heartbeat(token)
+}
+
+/// GET /api/contacts?token= — 调用者视角的会话摘要（对端信息 + 最后消息 + 未读）。
 #[api(method = "GET", path = "/api/contacts")]
-pub fn list_contacts() []Contact {
-    return db.all_contacts()
+pub fn contacts(token str) []Contact {
+    return db.contacts(token)
 }
 
+/// POST /api/conversations/open — 幂等打开（或创建）与 peer 的双人会话。
+#[api(method = "POST", path = "/api/conversations/open")]
+pub fn open_conversation(token str, peer_id str) Conversation {
+    return db.open_conversation(token, peer_id)
+}
+
+/// GET /api/messages?token=&conversation_id= — 当前会话全量历史（参与者校验）。
 #[api(method = "GET", path = "/api/messages")]
-pub fn list_messages() []Message {
-    return db.all_messages()
+pub fn list_messages(token str, conversation_id str) []Message {
+    return db.list_messages(token, conversation_id)
 }
 
+/// POST /api/messages — 发送。token 解析发送者（不信任任何 sender 字段）；
+/// client_msg_id 唯一约束保证重试幂等；成功即落库 + 广播 NewSendResult。
 #[api(method = "POST", path = "/api/messages")]
-pub fn send_message(sender str, text str) Message {
-    return db.create_message(sender, text)
+pub fn send_message(token str, conversation_id str, text str, client_msg_id str) SendResult {
+    return db.send_message(token, conversation_id, text, client_msg_id)
 }
 
-#[api(method = "POST", path = "/api/bot_reply")]
-pub fn bot_reply(contact_id str, query str) Message {
-    return db.bot_reply(contact_id, query)
-}
-
-/// POST /api/typing — Plan 399 §6: typing-indicator signal. Void return; the
-/// handler broadcasts a Typing event (the sender name) over the SSE bus so all
-/// connected clients see "X is typing…". fn name contains "typing" so the
-/// codegen broadcasts discriminator "Typing" (broadcast_event_name convention).
+/// POST /api/typing — token 校验通过才让广播名副其实（外观性边界见
+/// capability-decision.md；codegen 约束：广播 name 取首个 str 体参数）。
 #[api(method = "POST", path = "/api/typing")]
-pub fn set_typing(sender str) {
-    return db.set_typing(sender)
+pub fn set_typing(name str, token str) {
+    return db.set_typing(name, token)
 }
 
-/// GET /api/stream — frontend opens EventSource here (codegen-driven).
+/// POST /api/read — 标记会话已读（清未读）。
+#[api(method = "POST", path = "/api/read")]
+pub fn mark_read(token str, conversation_id str) {
+    return db.mark_read(token, conversation_id)
+}
+
+/// GET /api/stream — SSE 订阅（codegen 依 ~Stream<ChatEvent> 生成 SSE 处理器
+/// 与 events 总线；POST 广播依赖 has_sse 检测，此端点不可省）。
 #[api(method = "GET", path = "/api/stream")]
 pub fn stream() ~Stream<ChatEvent> {
     return bus.subscribe()
+}
+
+/// POST /api/test/reset — 仅 CHAT_TEST_MODE=1 生效（普通模式空操作）。
+#[api(method = "POST", path = "/api/test/reset")]
+pub fn test_reset() {
+    return db.test_reset()
 }

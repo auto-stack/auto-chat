@@ -1,17 +1,67 @@
+// types.at — 前端镜像的后端契约类型（与 src/back/api.at 保持同形）。
+// CHAT-001 v2：真实人际聊天；气泡方向由 sender_id == 本端 id 派生。
+type Identity {
+    id str
+    name str
+    avatar str
+    online bool
+}
+
+type MeInfo {
+    id str
+    name str
+    avatar str
+    token str
+}
+
+type LoginAck {
+    id str
+    name str
+    avatar str
+}
+
 type Contact {
     id str
     name str
     avatar str
     status str
+    peer_id str
     last_message str
     time str
     unread int
 }
 
+type Conversation {
+    id str
+    peer_id str
+    peer_name str
+    peer_avatar str
+}
+
 type Message {
     id int
+    conversation_id str
+    sender_id str
     sender str
     text str
     time str
-    mine bool
+    created_sec int
+    client_msg_id str
+}
+
+type SendResult {
+    ok bool
+    err str
+    message Message
+}
+
+type TypingEvent {
+    name str
+}
+
+/// 客户端待确认消息（sending/failed；确认后从 store.pending 移除）。
+type PendingMsg {
+    client_msg_id str
+    text str
+    state str
 }

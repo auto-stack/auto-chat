@@ -1,83 +1,125 @@
-// app.at — Chat shell (WeChat-style multi-contact & bot enhancements).
-// Plan 051 C7 试点：header 秒表计时器（timer 块 demo，vue/VM 双轨）。
-// Plan 544: 现代双栏布局（左侧 ChatSidebar + 右侧 MessageThread + Composer）。
+// app.at — CHAT-001 v2 聊天壳：登录屏 + 双栏会话界面 + 心跳定时器。
+// 1s 定时器驱动 store.RefreshTick：在线心跳、会话/身份/消息刷新（VM 轨的
+// 送达通道；Vue 轨 SSE 之外的重连兜底）与 typing 过期。
 use chat_store: ChatStore
 use chat_sidebar: ChatSidebar
 use message_thread: MessageThread
 use composer: Composer
-// PLAN-043 走查修复（2026-09-24）：`use back.api` 直接导入 VM 轨不可解析
-// ——发送/打字改 POST back 端点，消息刷新改 GET（lazy back 随首次请求孵化）。
 
 use stylekit.styles: caption_text
 style main_shell = "flex-1 gap-3 min-h-0 overflow-hidden"
+style login_card = "w-96 max-w-full bg-card rounded-2xl shadow-lg border border-border p-8 gap-4"
 
 widget App {
     msg {
         Init,
-        SendMessage(str),
-        Typing(str),
         ClockTick,
+        DoLogin,
+        SendMessage(str),
+        RetrySend(str),
+        Typing,
         SelectContact(str),
+        OpenIdentity(str),
         SearchContacts(str),
-        TriggerBotReply(str)
+        ProbeTrack
     }
 
     model {
-        var clock_secs int = 0
+        var booted bool = false
+        var login_name str = ""
     }
 
     timer {
         ClockTick (every_ms: 1000)
     }
 
-    computed {
-        active_name => if .store.active_contact_id == "alice" { "Alice" } else if .store.active_contact_id == "bob" { "Bob" } else if .store.active_contact_id == "autobot" { "AutoBot 🤖" } else { "Tech Support" }
-        active_avatar => if .store.active_contact_id == "alice" { "👩‍💼" } else if .store.active_contact_id == "bob" { "👨‍💻" } else if .store.active_contact_id == "autobot" { "🤖" } else { "🛠️" }
-        active_status => if .store.active_contact_id == "autobot" { "AI Assistant • Online" } else { "Online • Available" }
-    }
-
     view {
-        col {
-            style: "w-full h-screen flex-col bg-muted/20 p-3 gap-3 overflow-hidden"
-            // Header Bar
-            row {
-                style: "items-center justify-between px-5 py-2.5 bg-card rounded-xl shadow-xs border border-border"
-                row {
-                    style: "items-center gap-2"
-                    text "💬" { style: "text-xl" }
-                    h2 "Chat" { style: "text-lg font-bold text-foreground tracking-tight" }
-                    text "WeChat Edition" { style: "text-xs font-medium text-muted-foreground ml-2 px-2.5 py-0.5 bg-muted rounded-full border border-border/50" }
-                }
-                row {
-                    style: "items-center gap-3"
-                    if .store.loading {
-                        text "Loading…" { style: caption_text }
+        if .store.my_id == "" {
+            // —— 登录屏：本端身份是会话归属的锚点 ——
+            col {
+                style: "w-full h-screen items-center justify-center bg-muted/20 p-6"
+                col {
+                    style: login_card
+                    row {
+                        style: "items-center gap-2"
+                        text "💬" { style: "text-2xl" }
+                        col {
+                            text "Chat" { style: "text-xl font-bold text-foreground tracking-tight" }
+                            text "真实人际聊天 · 输入你的名字开始" { style: caption_text }
+                        }
                     }
-                    text f"⏱ ${.clock_secs}s" { style: "text-xs text-muted-foreground tabular-nums font-mono" }
+                    input {
+                        placeholder: "你的名字（如：甲）"
+                        value: .login_name
+                        onenter: .DoLogin
+                        style: "w-full px-4 py-2.5 bg-background border border-border rounded-xl text-sm text-foreground outline-none focus:border-primary transition-colors"
+                    }
+                    if .store.login_error != "" {
+                        text .store.login_error { style: "text-xs text-destructive font-medium" }
+                    }
+                    button "进入聊天" {
+                        onclick: .DoLogin
+                        style: "w-full px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold shadow-xs hover:bg-primary/90 transition-colors"
+                    }
+                    if .store.online == false {
+                        text "连接断开：请确认后端已在 17823 运行" { style: "text-xs text-muted-foreground" }
+                    }
                 }
             }
+        }
+        if .store.my_id != "" {
+            // —— 会话壳 ——
+            col {
+                style: "w-full h-screen flex-col bg-muted/20 p-3 gap-3 overflow-hidden"
+                // Header：本端身份 + 连接状态
+                row {
+                    style: "items-center justify-between px-5 py-2.5 bg-card rounded-xl shadow-xs border border-border"
+                    row {
+                        style: "items-center gap-2"
+                        text .store.my_avatar { style: "text-xl" }
+                        col {
+                            text .store.my_name { style: "text-sm font-bold text-foreground tracking-tight" }
+                            if .store.online {
+                                text "🟢 已连接" { style: "text-[10px] text-muted-foreground" }
+                            } else {
+                                text "🔴 连接断开，重试中…" { style: "text-[10px] text-destructive" }
+                            }
+                        }
+                    }
+                    row {
+                        style: "items-center gap-3"
+                        text "真实人际聊天" { style: "text-xs font-medium text-muted-foreground ml-2 px-2.5 py-0.5 bg-muted rounded-full border border-border/50" }
+                    }
+                }
 
-            // Main Dual-column Body
-            row {
-                style: main_shell
-                ChatSidebar(
-                    contacts: .store.contacts,
-                    active_id: .store.active_contact_id,
-                    search_query: .store.search_query,
-                    on_select: .SelectContact,
-                    on_search: .SearchContacts
-                )
-                col {
+                // Main Dual-column Body
+                row {
                     style: main_shell
-                    MessageThread(
-                        messages: .store.messages,
-                        typing_name: .store.typing_name,
-                        active_name: .active_name,
-                        active_avatar: .active_avatar,
-                        active_status: .active_status,
-                        on_trigger_bot: .TriggerBotReply
+                    ChatSidebar(
+                        contacts: .store.conv_list,
+                        identities: .store.peer_list,
+                        show_conv_list: .store.show_conv_list,
+                        active_id: .store.active_contact_id,
+                        my_id: .store.my_id,
+                        search_query: .store.search_query,
+                        on_select: .SelectContact,
+                        on_open: .OpenIdentity,
+                        on_search: .SearchContacts
                     )
-                    Composer(on_send: .SendMessage, on_typing: .Typing)
+                    col {
+                        style: main_shell
+                        MessageThread(
+                            messages: .store.messages,
+                            pending: .store.pending,
+                            typing_name: .store.typing_name,
+                            peer_name: .store.active_peer_name,
+                            peer_avatar: .store.active_peer_avatar,
+                            peer_status: .store.active_peer_status,
+                            my_id: .store.my_id,
+                            on_retry: .RetrySend
+                        )
+                        Composer(on_send: .SendMessage, on_typing: .Typing)
+                    }
                 }
             }
         }
@@ -85,26 +127,37 @@ widget App {
 
     on {
         .Init -> {
-            store.Init()
+            if .booted == false {
+                .booted = true
+            }
+            .ProbeTrack()
+        }
+        .ProbeTrack -> {
+            store.show_conv_list = Env.track() == "vue"
         }
         .ClockTick -> {
-            .clock_secs = .clock_secs + 1
+            store.RefreshTick()
+        }
+        .DoLogin -> {
+            store.Login(.login_name)
         }
         .SendMessage(text) -> {
-            try { Http.post("/api/messages", json.from_value({ sender: "You", text: text })) } catch { }
-            store.messages = Http.get_json("/api/messages")
+            store.SendText(text)
         }
-        .Typing(name) -> {
-            try { Http.post("/api/typing", json.from_value({ sender: name })) } catch { }
+        .RetrySend(cid) -> {
+            store.RetrySend(cid)
+        }
+        .Typing -> {
+            store.MarkTyping()
         }
         .SelectContact(id) -> {
             store.SelectContact(id)
         }
+        .OpenIdentity(peer_id) -> {
+            store.OpenIdentity(peer_id)
+        }
         .SearchContacts(query) -> {
             store.Search(query)
-        }
-        .TriggerBotReply(query) -> {
-            store.TriggerBot(query)
         }
     }
 }

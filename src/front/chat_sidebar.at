@@ -1,10 +1,15 @@
-// chat_sidebar.at — Left contacts and conversation navigation panel.
+// chat_sidebar.at — 左侧栏：会话列表（含未读/最后消息）+ 联系人（发起新会话）。
+// 数据全部来自真实后端（GET /api/contacts、/api/identities）；搜索为客户端
+// 内联过滤（模板内 str.contains —— 自由函数不出现在视图模板，Vue 轨无绑定）。
+
 style nav_item = "text-xs text-muted-foreground truncate"
 style sidebar_col = "flex-1 min-w-0"
+style section_title = "text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2"
 
-widget ChatSidebar(contacts: []Contact, active_id: str, search_query: str, on_select: msg, on_search: msg) {
+widget ChatSidebar(contacts: []Contact, identities: []Identity, active_id: str, my_id: str, search_query: str, show_conv_list: bool, on_select: msg, on_open: msg, on_search: msg) {
     msg {
         SelectContact(str),
+        OpenIdentity(str),
         SearchChanged
     }
 
@@ -15,29 +20,14 @@ widget ChatSidebar(contacts: []Contact, active_id: str, search_query: str, on_se
     view {
         col {
             style: "w-72 md:w-80 bg-card rounded-xl shadow-sm border border-border flex-col h-full overflow-hidden flex-shrink-0"
-            // Header user profile
-            row {
-                style: "items-center gap-3 p-4 border-b border-border bg-muted/20"
-                text "🧑‍💻" { style: "text-2xl p-1.5 bg-card rounded-xl shadow-xs border border-border/50" }
-                col {
-                    style: sidebar_col
-                    row {
-                        style: "items-center gap-1.5"
-                        text "You" { style: "text-sm font-bold text-foreground" }
-                        text "🟢" { style: "text-[10px]" }
-                    }
-                    text "Online • WeChat IM" { style: nav_item }
-                }
-            }
-
-            // Search bar
+            // 搜索
             col {
                 style: "p-3 border-b border-border/50"
                 row {
                     style: "items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-lg shadow-xs"
                     text "🔍" { style: "text-xs opacity-60" }
                     input {
-                        placeholder: "Search chats..."
+                        placeholder: "搜索会话和联系人..."
                         value: .local_query
                         oninput: .SearchChanged
                         style: "flex-1 bg-transparent text-xs text-foreground outline-none"
@@ -45,36 +35,150 @@ widget ChatSidebar(contacts: []Contact, active_id: str, search_query: str, on_se
                 }
             }
 
-            // Contact list
             col {
-                style: "flex-1 overflow-y-auto p-2 gap-1 min-h-0"
+                style: "flex-1 overflow-y-auto p-2 gap-2 min-h-0"
+                // —— 会话 ——
+                text "会话" { style: section_title }
                 if .contacts.len() == 0 {
                     col {
-                        style: "flex-1 items-center justify-center p-6 text-muted-foreground text-xs"
-                        text "No contacts found"
+                        style: "items-center justify-center p-4 text-muted-foreground text-xs gap-1"
+                        text "还没有会话"
+                        text "从下方联系人发起聊天" { style: "text-[10px] opacity-70" }
                     }
                 }
+                if .show_conv_list {
                 for c in .contacts {
-                    row {
-                        onclick: .SelectContact(.c.id)
-                        style: if .active_id == .c.id {
-                            "items-center gap-3 p-3 rounded-xl bg-accent text-accent-foreground border border-primary/20 cursor-pointer transition-all shadow-xs"
-                        } else {
-                            "items-center gap-3 p-3 rounded-xl hover:bg-muted/60 cursor-pointer transition-all border border-transparent"
-                        }
-                        text .c.avatar { style: "text-2xl p-1 bg-card rounded-lg shadow-xs flex-shrink-0" }
-                        col {
-                            style: sidebar_col
-                            row {
-                                style: "items-center justify-between"
-                                text .c.name { style: "text-sm font-semibold truncate" }
-                                text .c.time { style: "text-[11px] text-muted-foreground ml-1 flex-shrink-0" }
+                    if .local_query == "" {
+                        row {
+                            onclick: .SelectContact(.c.id)
+                            style: if .active_id == .c.id {
+                                "items-center gap-3 p-3 rounded-xl bg-accent text-accent-foreground border border-primary/20 cursor-pointer transition-all shadow-xs"
+                            } else {
+                                "items-center gap-3 p-3 rounded-xl hover:bg-muted/60 cursor-pointer transition-all border border-transparent"
                             }
+                            text .c.avatar { style: "text-2xl p-1 bg-card rounded-lg shadow-xs flex-shrink-0" }
+                            col {
+                                style: sidebar_col
+                                row {
+                                    style: "items-center justify-between"
+                                    row {
+                                        style: "items-center gap-1.5 min-w-0"
+                                        text .c.name { style: "text-sm font-semibold truncate" }
+                                        if .c.status == "online" {
+                                            text "🟢" { style: "text-[9px]" }
+                                        } else {
+                                            text "⚪" { style: "text-[9px] opacity-40" }
+                                        }
+                                    }
+                                    if .c.time != "" {
+                                        if .c.time != "" {
+                                            text .c.time { style: "text-[11px] text-muted-foreground ml-1 flex-shrink-0" }
+                                        }
+                                    }
+                                }
+                                row {
+                                    style: "items-center justify-between mt-1"
+                                    if .c.last_message != "" {
+                                        if .c.last_message != "" {
+                                            text .c.last_message { style: nav_item }
+                                        }
+                                    }
+                                    if .c.unread > 0 {
+                                        text f"${.c.unread}" { style: "text-[10px] font-bold bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded-full flex-shrink-0" }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        if .c.name.contains(.local_query) {
                             row {
-                                style: "items-center justify-between mt-1"
-                                text .c.last_message { style: nav_item }
-                                if .c.unread > 0 {
-                                    text f"${.c.unread}" { style: "text-[10px] font-bold bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded-full flex-shrink-0" }
+                                onclick: .SelectContact(.c.id)
+                                style: if .active_id == .c.id {
+                                    "items-center gap-3 p-3 rounded-xl bg-accent text-accent-foreground border border-primary/20 cursor-pointer transition-all shadow-xs"
+                                } else {
+                                    "items-center gap-3 p-3 rounded-xl hover:bg-muted/60 cursor-pointer transition-all border border-transparent"
+                                }
+                                text .c.avatar { style: "text-2xl p-1 bg-card rounded-lg shadow-xs flex-shrink-0" }
+                                col {
+                                    style: sidebar_col
+                                    row {
+                                        style: "items-center justify-between"
+                                        row {
+                                            style: "items-center gap-1.5 min-w-0"
+                                            text .c.name { style: "text-sm font-semibold truncate" }
+                                            if .c.status == "online" {
+                                                text "🟢" { style: "text-[9px]" }
+                                            } else {
+                                                text "⚪" { style: "text-[9px] opacity-40" }
+                                            }
+                                        }
+                                        if .c.time != "" {
+                                        if .c.time != "" {
+                                            text .c.time { style: "text-[11px] text-muted-foreground ml-1 flex-shrink-0" }
+                                        }
+                                    }
+                                    }
+                                    row {
+                                        style: "items-center justify-between mt-1"
+                                        if .c.last_message != "" {
+                                        if .c.last_message != "" {
+                                            text .c.last_message { style: nav_item }
+                                        }
+                                    }
+                                        if .c.unread > 0 {
+                                            text f"${.c.unread}" { style: "text-[10px] font-bold bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded-full flex-shrink-0" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                }
+
+                // —— 联系人（发起新会话）——
+                text "联系人" { style: section_title }
+                if .identities.len() == 0 {
+                    text "暂无其他已注册身份（他人登录后出现在这里）" { style: "text-[10px] text-muted-foreground px-2 py-1" }
+                }
+                for p in .identities {
+                    if .p.id != .my_id {
+                        if .local_query == "" {
+                            button {
+                                onclick: .OpenIdentity(.p.id)
+                                style: "items-center gap-3 p-2.5 rounded-xl hover:bg-muted/60 cursor-pointer transition-all border border-transparent"
+                                text .p.avatar { style: "text-xl p-1 bg-card rounded-lg shadow-xs flex-shrink-0" }
+                                col {
+                                    style: sidebar_col
+                                    row {
+                                        style: "items-center gap-1.5"
+                                        text .p.name { style: "text-xs font-medium truncate" }
+                                        if .p.online {
+                                            text "🟢 在线" { style: "text-[9px] text-muted-foreground" }
+                                        } else {
+                                            text "⚪ 离线" { style: "text-[9px] text-muted-foreground opacity-60" }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            if .p.name.contains(.local_query) {
+                                button {
+                                    onclick: .OpenIdentity(.p.id)
+                                    style: "items-center gap-3 p-2.5 rounded-xl hover:bg-muted/60 cursor-pointer transition-all border border-transparent"
+                                    text .p.avatar { style: "text-xl p-1 bg-card rounded-lg shadow-xs flex-shrink-0" }
+                                    col {
+                                        style: sidebar_col
+                                        row {
+                                            style: "items-center gap-1.5"
+                                            text .p.name { style: "text-xs font-medium truncate" }
+                                            if .p.online {
+                                                text "🟢 在线" { style: "text-[9px] text-muted-foreground" }
+                                            } else {
+                                                text "⚪ 离线" { style: "text-[9px] text-muted-foreground opacity-60" }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -87,6 +191,9 @@ widget ChatSidebar(contacts: []Contact, active_id: str, search_query: str, on_se
     on {
         .SelectContact(id) -> {
             on_select(id)
+        }
+        .OpenIdentity(peer_id) -> {
+            on_open(peer_id)
         }
         .SearchChanged -> {
             on_search(.local_query)

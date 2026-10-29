@@ -1,51 +1,402 @@
-// chat_store.at — SharedStore (Plan musk-022 & Plan 544).
-// PLAN-043 走查修复（2026-09-24）：`use back.api` 直接导入（含 SSE stream
-// 注线）在 VM 轨不可解析（P-15 静默跳过 → 无法启动）——联系人/消息改走
-// back HTTP 端点（GET /api/contacts|messages，lazy back 随首次请求孵化）；
-// SSE Typing 面保留 handler 但 VM 轨无源（vue codegen 特性），bot_reply
-// 改 POST /api/bot_reply 触发。
-
-// TypingEvent: the SSE payload for a typing signal (Plan 399 Phase 12).
-// Backend broadcasts {"event":"Typing","name":"<user>"}. The store reads .name.
-type TypingEvent { name str }
+// chat_store.at — CHAT-001 v2 真实人际会话 store（完全自包含，全内联）。
+//
+// 连接 profile（冻结）：docs/plans/evidence/001/capability-decision.md。
+// - 身份：登录（POST /api/login，携带客户端 nonce）→ GET /api/me?nonce= 认领
+//   token（唯一携带处；VM 轨 GET Unicode query 编码不可靠，故认领走 ASCII
+//   nonce 而非名字）。之后所有请求带 token；发送者归属由服务器解析，前端
+//   不传 sender 字段。
+// - 双轨数据配方：GET 响应一律 json.to_value(Http.get_json(url))（PLAN-617：
+//   VM 轨返回字符串需解析，Vue 轨恒等）。POST 体按 Env.track() 分轨：VM=
+//   JSON 字符串（VM post_json 弹栈 String，record 落调试转储，实测）；Vue=
+//   对象字面量（JSON.stringify(obj) 正确转义；字符串被二次编码，实测）。
+//   Vue 构建期 Env.track() 折叠为 'vue'（比较须写 != "vue" 避免无交集报错）。
+//   禁用项（全部实测）：`use back.api`（VM 轨 P-15 链接失败）；store 内 fn 块
+//   （UI 校验拒绝）；跨模块自由函数（store 不可解析）；视图模板内自由函数
+//   （Vue 无绑定）；字符串+int 直接拼接（VM 抛错）——数字一律 .to_string()
+//   或 f-string 后再拼（musk secretary_helpers 先例）。
+// - 送达：Vue 轨 SSE NewSendResult 实时推送 + 1s RefreshTick 兜底；VM 轨无
+//   SSE 源（P-15），RefreshTick 即送达通道。
+// - 发送状态机：pending（sending/failed）→ 应答 ok 落定；失败保留文本可重发；
+//   重试复用同一 client_msg_id（服务器 UNIQUE 去重，已确认消息不重复落库）。
+// - 会话隔离：消息按 conversation_id 请求/过滤；切换会话即切换数据源。
 
 store ChatStore {
     model {
-        var contacts = []
+        var conv_list = []
+        var peer_list = []
         var messages = []
-        var active_contact_id str = "alice"
-        var search_query str = ""
+        var pending = []
+        var my_id str = ""
+        var my_name str = ""
+        var my_avatar str = ""
+        var my_token str = ""
+        var active_contact_id str = ""
+        var active_peer_name str = ""
+        var active_peer_avatar str = ""
+        var active_peer_status str = ""
+        var login_name str = ""
+        var login_error str = ""
+        var login_busy bool = false
+        var online bool = true
         var typing_name str = ""
-        var loading bool = false
+        var typing_until int = 0
+        var search_query str = ""
+        var show_conv_list bool = true
+        var send_seq int = 0
     }
 
-    msg { Init, SelectContact(str), Search(str), NewMessage(Message), Typing(TypingEvent), RefreshMessages, TriggerBot(str) }
+    msg { Login(str), SelectContact(str), OpenIdentity(str), Search(str), SendText(str), RetrySend(str), NewSendResult(SendResult), NewLoginAck(LoginAck), Typing(TypingEvent), RefreshTick, MarkTyping }
 
     on {
-        .Init -> {
-            .loading = true
-            .contacts = Http.get_json("/api/contacts")
-            .messages = Http.get_json("/api/messages")
-            .loading = false
+        .Login(name) -> {
+            if name != "" {
+                if .login_busy == false {
+                    .login_busy = true
+                    .login_error = ""
+                    // nonce 为客户端生成 ASCII 一次性认领凭据（token 只经 me 响应交付）
+                    var nonce str = "n-" + .send_seq.to_string() + "-" + .my_id
+                    .send_seq = .send_seq + 1
+                    var esc_name str = name.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                    if Env.track() != "vue" {
+                        try { Http.post("/api/login", "{\"name\":\"" + esc_name + "\",\"nonce\":\"" + nonce + "\"}") } catch { }
+                    } else {
+                        try { Http.post("/api/login", { name: name, nonce: nonce }) } catch { }
+                    }
+                    try {
+                        var m = json.to_value(Http.get_json("/api/me?nonce=" + nonce))
+                        .my_id = m.id
+                        .my_name = m.name
+                        .my_avatar = m.avatar
+                        .my_token = m.token
+                        .online = true
+                        if .my_id == "" {
+                            .login_error = "登录失败：名字无效或服务器拒绝"
+                        }
+                    } catch {
+                        .online = false
+                        .login_error = "连接失败：后端不可达（17823）"
+                    }
+                    .login_busy = false
+                }
+            } else {
+                .login_error = "请输入名字"
+            }
         }
         .SelectContact(id) -> {
-            .active_contact_id = id
+            if id != "" {
+                .active_contact_id = id
+                .messages = []
+                if .my_token != "" {
+                    try {
+                        .messages = json.to_value(Http.get_json("/api/messages?token=" + .my_token + "&conversation_id=" + id))
+                    } catch {
+                        .online = false
+                    }
+                    if Env.track() != "vue" {
+                        try { Http.post("/api/read", "{\"token\":\"" + .my_token + "\",\"conversation_id\":\"" + id + "\"}") } catch { }
+                    } else {
+                        try { Http.post("/api/read", { token: .my_token, conversation_id: id }) } catch { }
+                    }
+                    .active_peer_name = ""
+                    .active_peer_avatar = ""
+                    .active_peer_status = ""
+                    for c in .conv_list {
+                        if c.id == id {
+                            .active_peer_name = c.name
+                            .active_peer_avatar = c.avatar
+                            .active_peer_status = c.status
+                        }
+                    }
+                }
+            } else {
+                .active_contact_id = ""
+                .active_peer_name = ""
+                .active_peer_avatar = ""
+                .active_peer_status = ""
+            }
+        }
+        .OpenIdentity(peer_id) -> {
+            if peer_id != "" {
+                if peer_id != .my_id {
+                    if .my_token != "" {
+                        try {
+                            var cv = []
+                            if Env.track() != "vue" {
+                                cv = json.to_value(Http.post("/api/conversations/open", "{\"token\":\"" + .my_token + "\",\"peer_id\":\"" + peer_id + "\"}"))
+                            } else {
+                                cv = json.to_value(Http.post("/api/conversations/open", { token: .my_token, peer_id: peer_id }))
+                            }
+                            if cv.id != "" {
+                                .active_contact_id = cv.id
+                                .messages = []
+                                try {
+                                    .messages = json.to_value(Http.get_json("/api/messages?token=" + .my_token + "&conversation_id=" + cv.id))
+                                } catch {
+                                    .online = false
+                                }
+                                if Env.track() != "vue" {
+                                    try { Http.post("/api/read", "{\"token\":\"" + .my_token + "\",\"conversation_id\":\"" + cv.id + "\"}") } catch { }
+                                } else {
+                                    try { Http.post("/api/read", { token: .my_token, conversation_id: cv.id }) } catch { }
+                                }
+                                .active_peer_name = cv.peer_name
+                                .active_peer_avatar = cv.peer_avatar
+                                .active_peer_status = ""
+                            }
+                        } catch {
+                            .online = false
+                        }
+                    }
+                }
+            }
         }
         .Search(query) -> {
             .search_query = query
         }
-        .NewMessage(msg) -> {
-            .messages.push(msg)
+        .SendText(text) -> {
+            if text != "" {
+                if .my_token != "" {
+                    if .active_contact_id != "" {
+                        var cid str = "cm-" + .send_seq.to_string() + "-" + .my_token
+                        .send_seq = .send_seq + 1
+                        var esc_new str = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                        var p_new = json.parse("{\"client_msg_id\":\"" + cid + "\",\"text\":\"" + esc_new + "\",\"state\":\"sending\"}")
+                        .pending.push(p_new)
+                        try {
+                            var esc_text str = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                            var sr = []
+                            if Env.track() != "vue" {
+                                sr = json.to_value(Http.post("/api/messages", "{\"token\":\"" + .my_token + "\",\"conversation_id\":\"" + .active_contact_id + "\",\"text\":\"" + esc_text + "\",\"client_msg_id\":\"" + cid + "\"}"))
+                            } else {
+                                sr = json.to_value(Http.post("/api/messages", { token: .my_token, conversation_id: .active_contact_id, text: text, client_msg_id: cid }))
+                            }
+                            if sr.ok {
+                                var keep = []
+                                for pp in .pending {
+                                    if pp.client_msg_id != cid {
+                                        keep.push(pp)
+                                    }
+                                }
+                                .pending = keep
+                                if sr.message.conversation_id == .active_contact_id {
+                                    var exists bool = false
+                                    var kept = []
+                                    for m in .messages {
+                                        if m.client_msg_id == cid {
+                                            exists = true
+                                            kept.push(sr.message)
+                                        } else {
+                                            kept.push(m)
+                                        }
+                                    }
+                                    if exists {
+                                        .messages = kept
+                                    } else {
+                                        .messages.push(sr.message)
+                                    }
+                                }
+                                .online = true
+                            } else {
+                                var marked = []
+                                for pp2 in .pending {
+                                    var st2 str = pp2.state
+                                    if pp2.client_msg_id == cid {
+                                        st2 = "failed"
+                                    }
+                                    var et2 str = pp2.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                                    var p_mk = json.parse("{\"client_msg_id\":\"" + pp2.client_msg_id + "\",\"text\":\"" + et2 + "\",\"state\":\"" + st2 + "\"}")
+                                    marked.push(p_mk)
+                                }
+                                .pending = marked
+                            }
+                        } catch {
+                            var marked2 = []
+                            for pp3 in .pending {
+                                var st3 str = pp3.state
+                                if pp3.client_msg_id == cid {
+                                    st3 = "failed"
+                                }
+                                var et3 str = pp3.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                                var p_mk2 = json.parse("{\"client_msg_id\":\"" + pp3.client_msg_id + "\",\"text\":\"" + et3 + "\",\"state\":\"" + st3 + "\"}")
+                                marked2.push(p_mk2)
+                            }
+                            .pending = marked2
+                            .online = false
+                        }
+                    }
+                }
+            }
+        }
+        .RetrySend(cid) -> {
+            var text str = ""
+            for pp in .pending {
+                if pp.client_msg_id == cid {
+                    text = pp.text
+                }
+            }
+            if text != "" {
+                if .my_token != "" {
+                    if .active_contact_id != "" {
+                        // 置回 sending；重试复用同一 client_msg_id（服务器 UNIQUE 去重）
+                        var reset = []
+                        for pp0 in .pending {
+                            var st0 str = pp0.state
+                            if pp0.client_msg_id == cid {
+                                st0 = "sending"
+                            }
+                            var et0 str = pp0.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                            var p_rst = json.parse("{\"client_msg_id\":\"" + pp0.client_msg_id + "\",\"text\":\"" + et0 + "\",\"state\":\"" + st0 + "\"}")
+                            reset.push(p_rst)
+                        }
+                        .pending = reset
+                        var esc_text str = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                        try {
+                            var sr = []
+                            if Env.track() != "vue" {
+                                sr = json.to_value(Http.post("/api/messages", "{\"token\":\"" + .my_token + "\",\"conversation_id\":\"" + .active_contact_id + "\",\"text\":\"" + esc_text + "\",\"client_msg_id\":\"" + cid + "\"}"))
+                            } else {
+                                sr = json.to_value(Http.post("/api/messages", { token: .my_token, conversation_id: .active_contact_id, text: text, client_msg_id: cid }))
+                            }
+                            if sr.ok {
+                                var keep = []
+                                for pp in .pending {
+                                    if pp.client_msg_id != cid {
+                                        keep.push(pp)
+                                    }
+                                }
+                                .pending = keep
+                                if sr.message.conversation_id == .active_contact_id {
+                                    var exists bool = false
+                                    var kept = []
+                                    for m in .messages {
+                                        if m.client_msg_id == cid {
+                                            exists = true
+                                            kept.push(sr.message)
+                                        } else {
+                                            kept.push(m)
+                                        }
+                                    }
+                                    if exists {
+                                        .messages = kept
+                                    } else {
+                                        .messages.push(sr.message)
+                                    }
+                                }
+                                .online = true
+                            } else {
+                                var marked = []
+                                for pp2 in .pending {
+                                    var st2 str = pp2.state
+                                    if pp2.client_msg_id == cid {
+                                        st2 = "failed"
+                                    }
+                                    var et2 str = pp2.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                                    var p_mk = json.parse("{\"client_msg_id\":\"" + pp2.client_msg_id + "\",\"text\":\"" + et2 + "\",\"state\":\"" + st2 + "\"}")
+                                    marked.push(p_mk)
+                                }
+                                .pending = marked
+                            }
+                        } catch {
+                            var marked2 = []
+                            for pp3 in .pending {
+                                var st3 str = pp3.state
+                                if pp3.client_msg_id == cid {
+                                    st3 = "failed"
+                                }
+                                var et3 str = pp3.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                                var p_mk2 = json.parse("{\"client_msg_id\":\"" + pp3.client_msg_id + "\",\"text\":\"" + et3 + "\",\"state\":\"" + st3 + "\"}")
+                                marked2.push(p_mk2)
+                            }
+                            .pending = marked2
+                            .online = false
+                        }
+                    }
+                }
+            }
+        }
+        .NewSendResult(sr) -> {
+            // Vue 轨 SSE 实时推送：发送者确认 + 对端送达；VM 轨无源（P-15）
+            if sr.ok {
+                var cid str = sr.message.client_msg_id
+                var keep = []
+                for pp in .pending {
+                    if pp.client_msg_id != cid {
+                        keep.push(pp)
+                    }
+                }
+                .pending = keep
+                if sr.message.conversation_id == .active_contact_id {
+                    var exists bool = false
+                    var kept = []
+                    for m in .messages {
+                        if m.client_msg_id == cid {
+                            exists = true
+                            kept.push(sr.message)
+                        } else {
+                            kept.push(m)
+                        }
+                    }
+                    if exists {
+                        .messages = kept
+                    } else {
+                        .messages.push(sr.message)
+                    }
+                }
+            }
+        }
+        .NewLoginAck(ack) -> {
+            // 在线名单变更信号；1s RefreshTick 统一刷新
+            .online = .online
         }
         .Typing(evt) -> {
             .typing_name = evt.name
+            .typing_until = Time.now_ms() + 3000
         }
-        .RefreshMessages -> {
-            .messages = Http.get_json("/api/messages")
+        .RefreshTick -> {
+            if .typing_until > 0 {
+                if Time.now_ms() > .typing_until {
+                    .typing_until = 0
+                    .typing_name = ""
+                }
+            }
+            if .my_token != "" {
+                if Env.track() != "vue" {
+                    try { Http.post("/api/heartbeat", "{\"token\":\"" + .my_token + "\"}") } catch { }
+                } else {
+                    try { Http.post("/api/heartbeat", { token: .my_token }) } catch { }
+                }
+                try {
+                    .conv_list = json.to_value(Http.get_json("/api/contacts?token=" + .my_token))
+                    .peer_list = json.to_value(Http.get_json("/api/identities"))
+                    if .active_contact_id != "" {
+                        .messages = json.to_value(Http.get_json("/api/messages?token=" + .my_token + "&conversation_id=" + .active_contact_id))
+                        .active_peer_name = ""
+                        .active_peer_avatar = ""
+                        .active_peer_status = ""
+                        for c in .conv_list {
+                            if c.id == .active_contact_id {
+                                .active_peer_name = c.name
+                                .active_peer_avatar = c.avatar
+                                .active_peer_status = c.status
+                            }
+                        }
+                    }
+                    .online = true
+                } catch {
+                    .online = false
+                }
+            }
         }
-        .TriggerBot(query) -> {
-            try { Http.post("/api/bot_reply", json.from_value({ contact_id: .active_contact_id, query: query })) } catch { }
-            .messages = Http.get_json("/api/messages")
+        .MarkTyping -> {
+            if .my_token != "" {
+                if .active_contact_id != "" {
+                    if Env.track() != "vue" {
+                        try { Http.post("/api/typing", "{\"name\":\"" + .my_name + "\",\"token\":\"" + .my_token + "\"}") } catch { }
+                    } else {
+                        try { Http.post("/api/typing", { name: .my_name, token: .my_token }) } catch { }
+                    }
+                }
+            }
         }
     }
 }
