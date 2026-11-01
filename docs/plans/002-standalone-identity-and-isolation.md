@@ -79,8 +79,8 @@ T-00 优先核验当前 SDK 认证、随机数、摘要与会话能力，冻结�
 
 | delta_id | add/modify/retire | docs/specs/... target | before/after rule | rationale | acceptance IDs |
 |---|---|---|---|---|---|
-| SD-01 | modify | docs/specs/chat/basic-capabilities.md | 名字即登录/全员流 → 有秘密的身份恢复＋服务端会话隔离；旧数据迁移与退出语义 | 消除可冒名与跨会话字节泄漏 | AC-02/03/04 |
-| SD-02 | add | docs/specs/chat/standalone-runtime-and-identity.md | 新增独立准备/启动、冷缓存与凭据/送达 profile、版本证据 | 不依赖 OS 或手动先开另一端 | AC-01/05 |
+| SD-01 | modify | docs/specs/chat/basic-capabilities.md | 名字即登录/全员流 → 有秘密的身份恢复＋服务端会话隔离＋凭据不入对端可见元数据；旧数据迁移与退出语义；API v3（register/login/logout/adopt，me+stream 退役） | 消除可冒名与跨会话字节泄漏（含复审 F-1 元数据面） | AC-02/03/04 |
+| SD-02 | add | docs/specs/chat/standalone-runtime-and-identity.md | 新增独立准备/启动、冷缓存与凭据/送达 profile、版本证据、已知边界 | 不依赖 OS 或手动先开另一端 | AC-01/05 |
 
 ## 6. 测试设计
 
