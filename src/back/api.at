@@ -17,19 +17,33 @@ pub type Identity = {
     online: bool
 }
 
-/// GET /api/me 专用：唯一允许携带 token 的响应（不进任何广播）。
-pub type MeInfo = {
+/// POST /api/register 应答（CHAT-002）：secret 为一次性展示的 256-bit
+/// 恢复凭据（仅随本响应交付给注册者，不入任何日志/列表）。
+pub type RegisterResult = {
+    ok: bool
+    err: str
+    id: str
+    name: str
+    avatar: str
+    secret: str
+    token: str
+}
+
+/// POST /api/login 应答（CHAT-002）：name + secret 恢复；token 仅随本响应交付。
+pub type LoginResult = {
+    ok: bool
+    err: str
     id: str
     name: str
     avatar: str
     token: str
 }
 
-/// POST /api/login 应答 + NewLoginAck 广播载荷（不含 token，兼作在线名单变更信号）。
-pub type LoginAck = {
-    id: str
-    name: str
-    avatar: str
+/// POST /api/legacy/adopt 应答（CHAT-002）：受控旧身份恢复，一次性铸发新凭据。
+pub type AdoptResult = {
+    ok: bool
+    err: str
+    secret: str
 }
 
 /// 侧栏会话摘要（沿用 Contact 界面形状；id = conversation_id，name/avatar = 对端）。
@@ -81,19 +95,31 @@ pub type PendingMsg = {
 
 use db
 
-/// POST /api/login — 按名 find-or-create 身份并重签 token；nonce 为客户端
-/// 生成的 ASCII 一次性认领凭据（VM 轨 GET Unicode query 编码不可靠实测，
-/// 故 token 认领走 ASCII nonce 而非名字 query）。广播 NewLoginAck（无 token）。
-#[api(method = "POST", path = "/api/login")]
-pub fn login(name str, nonce str) LoginAck {
-    return db.login(name, nonce)
+/// POST /api/register — 注册新身份（CHAT-002）：服务器铸造 256-bit 恢复
+/// 凭据，一次性随本响应返回；同名/legacy 名均拒绝（name-taken）。
+#[api(method = "POST", path = "/api/register")]
+pub fn register(name str) RegisterResult {
+    return db.register(name)
 }
 
-/// GET /api/me?nonce= — 按一次性 nonce 认领本端身份与 token（仅 GET 响应
-/// 携带 token，不广播；认领后 pending 失效，同名重登重发 nonce 即可）。
-#[api(method = "GET", path = "/api/me")]
-pub fn me(nonce str) MeInfo {
-    return db.me(nonce)
+/// POST /api/login — name + secret 恢复既有身份（CHAT-002）：服务端精确
+/// 匹配校验；成功签发新会话 token（撤销旧会话）；失败一律 unauthorized。
+#[api(method = "POST", path = "/api/login")]
+pub fn login(name str, secret str) LoginResult {
+    return db.login(name, secret)
+}
+
+/// POST /api/logout — 撤销本会话 token（服务端失效 + 客户端丢弃）。
+#[api(method = "POST", path = "/api/logout")]
+pub fn logout(token str) {
+    return db.logout(token)
+}
+
+/// POST /api/legacy/adopt — 受控旧身份恢复（CHAT-002）：仅服务器启动 env
+/// CHAT_LEGACY_ADOPT=1 时开放；旧弱 token 一次性核验，铸发新恢复凭据。
+#[api(method = "POST", path = "/api/legacy/adopt")]
+pub fn adopt_legacy(name str, legacy_token str) AdoptResult {
+    return db.adopt_legacy(name, legacy_token)
 }
 
 /// GET /api/identities — 已注册身份公开视图（无 token），online = 15s 内有心跳。

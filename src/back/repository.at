@@ -15,6 +15,7 @@
 // 业务检查 → 写入 → COMMIT；任一步失败 ROLLBACK，绝无部分状态。
 
 use auto.env
+use auto.rand
 use auto.sqlite
 
 // ═══════════════════════════════════════════════════════════
@@ -165,67 +166,224 @@ fn online_of(now int, last_seen_sec int) bool {
 // 身份（每函数自持连接；行单次构造，无下标赋值）
 // ═══════════════════════════════════════════════════════════
 
-/// 登录：按名 find-or-create + 重签 token + 登记 nonce 认领；返回 {id, name, avatar}。
-pub fn login_row(name str, nonce str) List<str> {
+// ═══════════════════════════════════════════════════════════
+// 身份（每函数自持连接；行单次构造，无下标赋值）
+// ═══════════════════════════════════════════════════════════
+
+/// v2 列检测（自持连接；identities 表须已由调用方 DDL 建好）：
+/// PRAGMA table_info 扫列名找 secret。全新库 DDL 即 v2 → true。
+fn identities_v2_ready() bool {
+    var db SqliteDb = sqlite.open(db_path())
+    db.exec("PRAGMA busy_timeout=3000")
+    var rows List<List<str>> = db.query("PRAGMA table_info(identities)")
+    var i int = 0
+    while i < rows.len() {
+        var row List<str> = rows[i]
+        if row[1] == "secret" {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// v1 → v2 受控迁移（决策稿 §4；一次性，幂等保护在调用方）：
+/// 1) VACUUM INTO 一致性备份（先备份后动库——失败即中止零写入）；
+/// 2) 单事务 ALTER 补 secret/status/legacy_token 列；
+/// 3) 既有身份全部 legacy 锁定：旧弱 token 移入 legacy_token（仅供受控
+///    adopt 一次性核验），token 清空（不再通行），status='legacy'。
+fn migrate_to_v2() str {
+    var ts int = now_sec()
+    var backup str = data_dir() + "/chat.db.pre-v2-" + str_of(ts) + ".bak"
+    var db SqliteDb = sqlite.open(db_path())
+    db.exec("PRAGMA busy_timeout=3000")
+    var rc int = db.exec("VACUUM INTO " + sql_str(backup))
+    if rc == -1 {
+        return "0"
+    }
+    db.exec("BEGIN IMMEDIATE")
+    var a1 int = db.exec("ALTER TABLE identities ADD COLUMN secret TEXT NOT NULL DEFAULT ''")
+    var a2 int = db.exec("ALTER TABLE identities ADD COLUMN status TEXT NOT NULL DEFAULT 'legacy'")
+    var a3 int = db.exec("ALTER TABLE identities ADD COLUMN legacy_token TEXT NOT NULL DEFAULT ''")
+    if a1 == -1 {
+        db.exec("ROLLBACK")
+        return "0"
+    }
+    if a2 == -1 {
+        db.exec("ROLLBACK")
+        return "0"
+    }
+    if a3 == -1 {
+        db.exec("ROLLBACK")
+        return "0"
+    }
+    db.exec("UPDATE identities SET legacy_token = token, token = '', status = 'legacy'")
+    db.exec("INSERT OR REPLACE INTO meta(k, v) VALUES('schema_version', '2')")
+    db.exec("COMMIT")
+    return "1"
+}
+
+/// 注册（CHAT-002 T-02）：新身份铸造 256-bit 恢复凭据（secure_hex(32)）+
+/// 会话 token；status='active'。同名已存在（含 legacy）→ name-taken。
+/// 返回 {ok("1"/"0"), err, id, name, avatar, secret, token}。
+pub fn register_row(name str) List<str> {
     if name == "" {
-        return ["", "", ""]
+        return ["0", "invalid-name", "", "", "", "", ""]
     }
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
-    var found List<List<str>> = db.query("SELECT id, name, avatar FROM identities WHERE name=" + sql_str(name))
-    var uid str = ""
-    var avatar str = ""
+    var found List<List<str>> = db.query("SELECT id FROM identities WHERE name=" + sql_str(name))
     if found.len() > 0 {
-        var row List<str> = found[0]
-        uid = row[0]
-        avatar = row[2]
-    } else {
-        uid = "u-" + str_of(next_seq("id_seq"))
-        avatar = avatar_for(uid)
-        db.exec("INSERT INTO identities(id, name, avatar, token, created_sec, last_seen_sec) VALUES(" + sql_str(uid) + ", " + sql_str(name) + ", " + sql_str(avatar) + ", '', '" + str_of(now) + "', '" + str_of(now) + "')")
+        return ["0", "name-taken", "", "", "", "", ""]
     }
-    var token str = "tok-" + uid + "-" + str_of(now)
-    db.exec("UPDATE identities SET token=" + sql_str(token) + ", last_seen_sec='" + str_of(now) + "' WHERE name=" + sql_str(name))
-    if nonce != "" {
-        db.exec("INSERT OR REPLACE INTO pending_login(nonce, token, created_sec) VALUES(" + sql_str(nonce) + ", " + sql_str(token) + ", '" + str_of(now) + "')")
+    if identities_v2_ready() == false {
+        if migrate_to_v2() == "0" {
+            return ["0", "migration-failed", "", "", "", "", ""]
+        }
     }
+    var uid str = "u-" + str_of(next_seq("id_seq"))
+    var avatar str = avatar_for(uid)
+    var secret str = rand.secure_hex(32)
+    var token str = rand.secure_hex(32)
+    if secret == "" {
+        return ["0", "entropy-failed", "", "", "", "", ""]
+    }
+    if token == "" {
+        return ["0", "entropy-failed", "", "", "", "", ""]
+    }
+    db.exec("INSERT INTO identities(id, name, avatar, token, created_sec, last_seen_sec, secret, status, legacy_token) VALUES(" + sql_str(uid) + ", " + sql_str(name) + ", " + sql_str(avatar) + ", " + sql_str(token) + ", '" + str_of(now) + "', '" + str_of(now) + "', " + sql_str(secret) + ", 'active', '')")
     var nm str = name
-    return [uid, nm, avatar]
+    return ["1", "", uid, nm, avatar, secret, token]
 }
 
-/// 按一次性 nonce 认领 {id, name, avatar, token}（认领即清除 pending；
-/// 仅 GET /api/me 用；token 只经此响应交付，不进任何广播）。
-pub fn identity_row_by_nonce(nonce str) List<str> {
-    if nonce == "" {
-        return ["", "", "", ""]
+/// 登录/恢复（CHAT-002 T-02）：name + secret 精确匹配，status='active'
+/// 才可登录（legacy 须走受控 adopt）；成功签发新会话 token（撤销旧会话）。
+/// 匿名失败一律 unauthorized（不区分未注册/错凭据，防枚举）。
+/// 返回 {ok("1"/"0"), err, id, name, avatar, token}。
+pub fn login_row(name str, secret str) List<str> {
+    if name == "" {
+        return ["0", "unauthorized", "", "", "", ""]
+    }
+    if secret == "" {
+        return ["0", "unauthorized", "", "", "", ""]
     }
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
-    var found List<List<str>> = db.query("SELECT i.id, i.name, i.avatar, i.token FROM identities i JOIN pending_login p ON p.token = i.token WHERE p.nonce = " + sql_str(nonce))
-    if found.len() > 0 {
-        var row List<str> = found[0]
-        var r0 str = row[0]
-        var r1 str = row[1]
-        var r2 str = row[2]
-        var r3 str = row[3]
-        db.exec("DELETE FROM pending_login WHERE nonce = " + sql_str(nonce))
-        return [r0, r1, r2, r3]
+    db.exec("PRAGMA journal_mode=WAL")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
+    db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
+    db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
+    db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
+    var found List<List<str>> = db.query("SELECT id, name, avatar, secret, status FROM identities WHERE name=" + sql_str(name))
+    if found.len() == 0 {
+        return ["0", "unauthorized", "", "", "", ""]
     }
-    return ["", "", "", ""]
+    var row List<str> = found[0]
+    if row[4] != "active" {
+        return ["0", "unauthorized", "", "", "", ""]
+    }
+    if row[3] == "" {
+        return ["0", "unauthorized", "", "", "", ""]
+    }
+    if row[3] != secret {
+        return ["0", "unauthorized", "", "", "", ""]
+    }
+    var token str = rand.secure_hex(32)
+    if token == "" {
+        return ["0", "entropy-failed", "", "", "", ""]
+    }
+    var now int = now_sec()
+    db.exec("UPDATE identities SET token=" + sql_str(token) + ", last_seen_sec='" + str_of(now) + "' WHERE name=" + sql_str(name))
+    var r0 str = row[0]
+    var r1 str = row[1]
+    var r2 str = row[2]
+    return ["1", "", r0, r1, r2, token]
 }
 
-/// token → {id, name, avatar}（无效 token 返回空 id）。
+/// 退出（CHAT-002 T-02）：撤销本会话 token（服务端失效 + 客户端丢弃）。
+pub fn logout_row(token str) {
+    if token == "" {
+        return
+    }
+    var db SqliteDb = sqlite.open(db_path())
+    db.exec("PRAGMA busy_timeout=3000")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
+    db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
+    db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
+    db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
+    db.exec("UPDATE identities SET token = '' WHERE token=" + sql_str(token))
+    return
+}
+
+/// 受控旧身份恢复（CHAT-002 T-02；决策稿 §4.3）：仅当启动 env
+/// CHAT_LEGACY_ADOPT=1 时开放；legacy_token 一次性核验 → 铸造新恢复凭据
+/// 并激活（legacy_token 随即清除——旧弱 token 单次窗口，不作长期通行证）。
+/// env 未开或任何不匹配 → 拒绝且零写入。
+/// 返回 {ok("1"/"0"), err, secret}。
+pub fn adopt_legacy_row(name str, legacy_token str) List<str> {
+    if env.get("CHAT_LEGACY_ADOPT") != "1" {
+        return ["0", "adopt-disabled", ""]
+    }
+    if name == "" {
+        return ["0", "unauthorized", ""]
+    }
+    if legacy_token == "" {
+        return ["0", "unauthorized", ""]
+    }
+    var db SqliteDb = sqlite.open(db_path())
+    db.exec("PRAGMA busy_timeout=3000")
+    db.exec("PRAGMA journal_mode=WAL")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
+    db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
+    db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
+    db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
+    if identities_v2_ready() == false {
+        if migrate_to_v2() == "0" {
+            return ["0", "migration-failed", ""]
+        }
+    }
+    var found List<List<str>> = db.query("SELECT id, status, legacy_token FROM identities WHERE name=" + sql_str(name))
+    if found.len() == 0 {
+        return ["0", "unauthorized", ""]
+    }
+    var row List<str> = found[0]
+    if row[1] != "legacy" {
+        return ["0", "not-legacy", ""]
+    }
+    if row[2] == "" {
+        return ["0", "unauthorized", ""]
+    }
+    if row[2] != legacy_token {
+        return ["0", "unauthorized", ""]
+    }
+    var secret str = rand.secure_hex(32)
+    if secret == "" {
+        return ["0", "entropy-failed", ""]
+    }
+    db.exec("UPDATE identities SET secret=" + sql_str(secret) + ", status='active', legacy_token='', token='' WHERE name=" + sql_str(name))
+    return ["1", "", secret]
+}
+
+/// token → {id, name, avatar}（无效 token 返回空 id）。auth 总闸：v1 库
+/// 在首个鉴权调用前完成受控迁移（legacy 行 token 已清空，旧弱 token 自然失效）。
 pub fn identity_row_by_token(token str) List<str> {
     if token == "" {
         return ["", "", ""]
+    }
+    if identities_v2_ready() == false {
+        if migrate_to_v2() == "0" {
+            return ["", "", ""]
+        }
     }
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
@@ -246,12 +404,11 @@ pub fn identity_rows() List<List<str>> {
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
     var rows List<List<str>> = db.query("SELECT id, name, avatar, last_seen_sec FROM identities ORDER BY id")
     var i int = 0
@@ -278,12 +435,11 @@ pub fn do_heartbeat(token str) str {
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
     var n int = db.exec("UPDATE identities SET last_seen_sec='" + str_of(now) + "' WHERE token=" + sql_str(token) + " AND token != ''")
     if n > 0 {
@@ -309,12 +465,11 @@ pub fn open_conversation_row(token str, peer_id str) List<str> {
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
     var peers List<List<str>> = db.query("SELECT name, avatar FROM identities WHERE id=" + sql_str(peer_id))
     if peers.len() == 0 {
@@ -350,12 +505,11 @@ pub fn contact_rows(token str) List<List<str>> {
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
     db.exec("UPDATE identities SET last_seen_sec='" + str_of(now) + "' WHERE id=" + sql_str(my_id))
     var mine str = sql_str(my_id)
@@ -399,12 +553,11 @@ pub fn message_rows(token str, conversation_id str) List<List<str>> {
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
     var mine str = sql_str(my_id)
     var conv str = sql_str(conversation_id)
@@ -445,12 +598,11 @@ pub fn send_message_row(token str, conversation_id str, text str, client_msg_id 
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
     var mine str = sql_str(my_id)
     var conv str = sql_str(conversation_id)
@@ -526,12 +678,11 @@ pub fn do_mark_read(token str, conversation_id str) {
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     var now int = now_sec()
     var mine str = sql_str(my_id)
     var conv str = sql_str(conversation_id)
@@ -560,12 +711,11 @@ pub fn do_reset() {
     var db SqliteDb = sqlite.open(db_path())
     db.exec("PRAGMA busy_timeout=3000")
     db.exec("PRAGMA journal_mode=WAL")
-    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0')")
+    db.exec("CREATE TABLE IF NOT EXISTS identities(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, avatar TEXT NOT NULL DEFAULT '', token TEXT NOT NULL DEFAULT '', created_sec TEXT NOT NULL DEFAULT '0', last_seen_sec TEXT NOT NULL DEFAULT '0', secret TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', legacy_token TEXT NOT NULL DEFAULT '')")
     db.exec("CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id TEXT NOT NULL, sender_id TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0', client_msg_id TEXT NOT NULL DEFAULT '', UNIQUE(conversation_id, client_msg_id))")
     db.exec("CREATE TABLE IF NOT EXISTS reads(conversation_id TEXT NOT NULL, reader_id TEXT NOT NULL, last_read_sec TEXT NOT NULL DEFAULT '0', PRIMARY KEY(conversation_id, reader_id))")
     db.exec("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
-    db.exec("CREATE TABLE IF NOT EXISTS pending_login(nonce TEXT PRIMARY KEY, token TEXT NOT NULL, created_sec TEXT NOT NULL DEFAULT '0')")
     db.exec("DELETE FROM messages")
     db.exec("DELETE FROM conversations")
     db.exec("DELETE FROM identities")

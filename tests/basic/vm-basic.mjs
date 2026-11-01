@@ -57,10 +57,19 @@ async function peerId(name) {
   return hit ? hit.id : "";
 }
 
+// CHAT-002 凭据模型：首次认领=注册（secret 缓存），后续=secret 登录拿新会话 token
+const secrets = new Map();
 async function claimIdentity(name) {
-  const nonce = `n-vm-${Date.now()}-${Math.random()}`;
-  await apiPost("/api/login", { name, nonce });
-  return await (await fetch(`${API}/api/me?nonce=${encodeURIComponent(nonce)}`)).json();
+  const known = secrets.get(name);
+  if (known) {
+    const j = await apiPost("/api/login", { name, secret: known });
+    if (!j.ok) throw new Error(`login ${name} failed: ${j.err}`);
+    return j;
+  }
+  const j = await apiPost("/api/register", { name });
+  if (!j.ok) throw new Error(`register ${name} failed: ${j.err}`);
+  secrets.set(name, j.secret);
+  return j;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -128,11 +137,14 @@ async function main() {
     if (!snap.includes("名字")) { fail(`登录屏未出现\n快照尾：\n${snap.slice(-800)}`); return; }
     if (snap.includes("Alice") || snap.includes("AutoBot")) { fail("出现演示假用户（Alice/AutoBot）"); return; }
     const inputs = await findInputs();
-    if (!inputs.length) { fail("找不到登录输入框"); return; }
+    if (inputs.length < 2) { fail("登录屏输入框不足（名字+恢复凭据）"); return; }
+    const jia = await claimIdentity("甲");
     await mcpCall("autoui_type", { element_id: inputs[0], text: "甲" });
-    await sleep(500);
-    const { target } = await findButtonByLabel("进入聊天");
-    if (!target) { fail("找不到进入聊天按钮"); return; }
+    await sleep(400);
+    await mcpCall("autoui_type", { element_id: inputs[1], text: jia.secret });
+    await sleep(400);
+    const { target } = await findButtonByLabel("登录");
+    if (!target) { fail("找不到登录按钮"); return; }
     const r = await mcpCall("autoui_action", { element_id: target, action: "press" });
     if (!/status: ok/.test(r)) { fail(`进入聊天按钮派发失败: ${r}`); return; }
     await sleep(2500);

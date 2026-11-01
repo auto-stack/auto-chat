@@ -13,8 +13,9 @@
 // 字，报 "expected arrow, colon or question mark"）——禁用 on 作标识符。
 
 use api: Identity
-use api: MeInfo
-use api: LoginAck
+use api: RegisterResult
+use api: LoginResult
+use api: AdoptResult
 use api: Contact
 use api: Conversation
 use api: Message
@@ -26,15 +27,33 @@ use repository
 // 身份与登录
 // ═══════════════════════════════════════════════════════════
 
-pub fn login(name str, nonce str) LoginAck {
-    var row List<str> = repository.login_row(name, nonce)
-    var ok LoginAck = LoginAck { id: row[0], name: row[1], avatar: row[2] }
-    return ok
+/// 注册（CHAT-002 T-02）：列序 {ok, err, id, name, avatar, secret, token}。
+pub fn register(name str) RegisterResult {
+    var row List<str> = repository.register_row(name)
+    var ok bool = row[0] == "1"
+    var r RegisterResult = RegisterResult { ok: ok, err: row[1], id: row[2], name: row[3], avatar: row[4], secret: row[5], token: row[6] }
+    return r
 }
 
-pub fn me(nonce str) MeInfo {
-    var row List<str> = repository.identity_row_by_nonce(nonce)
-    var r MeInfo = MeInfo { id: row[0], name: row[1], avatar: row[2], token: row[3] }
+/// 登录/恢复：列序 {ok, err, id, name, avatar, token}。
+pub fn login(name str, secret str) LoginResult {
+    var row List<str> = repository.login_row(name, secret)
+    var ok bool = row[0] == "1"
+    var r LoginResult = LoginResult { ok: ok, err: row[1], id: row[2], name: row[3], avatar: row[4], token: row[5] }
+    return r
+}
+
+/// 退出：撤销本会话 token。
+pub fn logout(token str) {
+    repository.logout_row(token)
+    return
+}
+
+/// 受控旧身份恢复：列序 {ok, err, secret}。
+pub fn adopt_legacy(name str, legacy_token str) AdoptResult {
+    var row List<str> = repository.adopt_legacy_row(name, legacy_token)
+    var ok bool = row[0] == "1"
+    var r AdoptResult = AdoptResult { ok: ok, err: row[1], secret: row[2] }
     return r
 }
 

@@ -1,12 +1,12 @@
 ---
 plan_id: CHAT-002
-status: executing
+status: execution_done
 feature_name: "独立启动、身份凭据与会话数据隔离"
 author: [Codex]
 created_at: 2026-10-31
 updated_at: 2026-11-01
 plan_revision: 1
-current_step: 3
+current_step: 7
 total_steps: 9
 base_branch: main
 base_commit: 992067fc2313932e0a6683142630569f5f6df477
@@ -110,11 +110,11 @@ T-00 优先核验当前 SDK 认证、随机数、摘要与会话能力，冻结�
 
 - [x] T-00（owner_stage=work；依赖001已交付；AC-01/02/03）：在本 clone 冻结当前源/工具，完成 §5 决策稿和最小可行性探针；先关闭身份/迁移/送达及冷准备决策，缺项转实际 owner 最小前置。 [✅ 2026-11-01] 决策稿 `D:/autostack/plan-artifacts/plan-002/standalone-decision.md`（sha256 `26fe4456…`）；§4 六项源 hash 逐字零漂移；auto-web HEAD 前进至 `ec9c4ba` 但被引 api_gen.rs/server_route.rs 字节一致，SSE 单总线结论重核成立。关键裁定：后端轨（a2r-std，path-pin 同源 auto-lang `b1a4871`）无 rand/无 digest/无 KDF（lib.rs 模块面实证；uuid()=epoch 纳秒 hex；simple_hash=SipHash）；bundled SQLite（libsqlite3-sys 0.27）PRNG 为 ChaCha20 但 winRandomness 种子仅 SYSTEMTIME+PID+tick+QPC（SQLITE_WIN32_USE_UUID 未定义，无 CSPRNG 输入）→ 非受支持 128-bit 熵源；VM 轨 Random 实为 SystemTime 纳秒 Xorshift64。**受支持安全随机原语缺失 → T-02 及下游阻塞，P-REQ-1 已提请 auto-lang owner（见 §10）**。
 - [x] T-01（owner_stage=work；依赖T-00；AC-01/05）：复用既有调度器，补独立准备/启动与本次 PID/端口/数据根身份检查、无副作用的测试模式验证，提供空缓存与错误记录。 [✅ 2026-11-01] `tests/basic/verify_basic.py` 重构为自管隔离门（有界 auto build/cargo build 准备、随机空闲端口、隔离 CHAT_DATA_DIR、端口→PID 归属断言、只读就绪探针、仅收割本次子树）；`tests/basic/vm-basic.mjs` 硬编码 17823 改为 env 透传。冷构建实测 210s（≤300s 门）。vue 8/8、vm 4/4 经新调度器全绿（证据 `plan-002/verify-{vue,vm}.json`）。VM 轨 `auto run` 每次重生成触发 relink 文件锁 → 调度器以副本 exe 启动后端规避。事故记录：一次 VM 预跑因本脚本未传 AUTO_HTTP_PORT，auto run 在 ：17823 以默认 APPDATA 数据根拉起后端写入测试身份两行；已备份至 `plan-002/appdata-pollution-backup-chat.db` 并逐表清零复核（APPDATA 现为 0 行）。
-- [ ] T-02（owner_stage=work；依赖T-00；AC-02/04）：在 repository/API 及现有前端 store 接入冻结凭据/会话、受控旧库迁移，先建立 C-02/C-04 反例再实现并回放。 **阻塞：P-REQ-1（后端轨受支持安全随机）**。C-02 反例已存证（plan-002/probe-baseline.out：同名接管 True、token 形如 tok-u-<n>-<epoch>）；迁移设计已冻结（决策稿 §4：fs.copy 备份→事务 ALTER+status='legacy'→env 门控一次性 adopt）。
-- [ ] T-03（owner_stage=work；依赖T-02及必要已交付前置；AC-03）：落实定向流或鉴权轮询，关闭公开私密广播旁路；保存 C-03 原始字节级证据。 [✅ 2026-11-01] 移除 /api/stream + ChatEvent/TypingSignal（api.at sha256 `8c2cec4c…`）；生成物核验：无 /api/stream 路由、events.rs 零 broadcast 调用方（has_sse 面 ＝ 404）。字节级证据两相：baseline（probe-baseline.out）匿名与第三身份 SSE 均收到私聊正文哨兵（泄露实证）→ post（probe-post.out）流 404、零泄露、B 轮询正常收取。送达=已鉴权按会话轮询（token 校验读写保持）；重连/退出后旧会话字节面复验归 T-05 门。token 强度升级随 T-02（P-REQ-1）。
-- [ ] T-04（owner_stage=work；依赖T-01/02/03；AC-01/04）：真实双客户端 Vue/VM 联系人、失败重发、退出重开与下一次发送；保持输入/幂等/历史回归。 **阻塞（依赖 T-02）**。既有回归基线已在新送达通道下复验：Vue 8/8、VM 4/4（含 T6 经 1s 轮询 3s 内送达；用例名待 T-05 正名）。
-- [ ] T-05（owner_stage=work；依赖T-04；AC-05）：使补充入口可执行、跑 C-01..05、原有双端任务与负控；整理 SD 候选，不以已有总数盖住新失败。 **阻塞（依赖 T-02/04）**；verify_identity.py 拟新增，probe_identity_isolation.py 已备其骨架。
-- [ ] T-06（owner_stage=work；依赖T-05；AC-01..05）：核对源/依赖漂移、凭据零泄漏、所有必需 oracle 与 README/roadmap，提交 execution_done 交接。 **阻塞（依赖 T-05）**；README 现状已随本轮交付同步（自管门 + SSE 移除 + 阻塞状态）。
+- [x] T-02（owner_stage=work；依赖T-00；AC-02/04）：在 repository/API 及现有前端 store 接入冻结凭据/会话、受控旧库迁移，先建立 C-02/C-04 反例再实现并回放。 [✅ 2026-11-01] P-REQ-1 已解除（auto-lang Plan 907 `secure_hex` 归档 `6ee01e0a6`+merge `9381e0746`，i64 修正 `ed38cf973`，codegen face `eda930b09`；auto-man CLI 死 feature 修复 `55c98c7`——均按各自 owner 仓 worktree 规约）。反例先行：`probe-baseline.out`（同名接管 True、旧 token 可读、SSE 泄私文）+ `c04-prefix.out`（legacy 库同名接管/旧 token 读私文）。实现：repository.at v2（secret/status/legacy_token 列、`identities_v2_ready` PRAGMA 检测、`migrate_to_v2` VACUUM INTO 备份→事务 ALTER→legacy 锁（token→legacy_token 后清空）、register/login/logout/adopt_legacy_row，凭据=secure_hex(32)）；api.at register/login/logout/legacy-adopt（/api/me+pending_login 退役）；db.at 委托；前端 store/App（登录=名+secret、注册一次性展示 secret、退出撤销）。工具链集成三处消费者侧修复均已落地 owner 仓。
+- [x] T-03（owner_stage=work；依赖T-02及必要已交付前置；AC-03）：落实定向流或鉴权轮询，关闭公开私密广播旁路；保存 C-03 原始字节级证据。 [✅ 2026-11-01] 移除 /api/stream + ChatEvent/TypingSignal；生成物核验：无 /api/stream 路由、events.rs 零 broadcast 调用方。字节级证据两相：baseline（probe-baseline.out）匿名与第三身份 SSE 均收到私聊正文哨兵 → post（probe-post.out）流 404、零泄露、B 轮询正常收取；C-03 终版门（verify-identity.json）：流 404、丙/匿名直读空、丙自会话无甲乙正文、公开身份面无 secret/token 字节。token 强度已随 T-02 升级为 secure_hex(32)。
+- [x] T-04（owner_stage=work；依赖T-01/02/03；AC-01/04）：真实双客户端 Vue/VM 联系人、失败重发、退出重开与下一次发送；保持输入/幂等/历史回归。 [✅ 2026-11-01] 双端测试更新至凭据模型（smoke.spec.ts claimIdentity 注册/登录+secret 输入、T6 正名"鉴权轮询送达"；vm-basic.mjs claimIdentity+双输入框+登录按钮）；自管门复跑 **Vue 8/8、VM 4/4**（verify-{vue,vm}.json，随机端口+隔离数据根+PID 归属，APPDATA 复核 0 行）。幂等/历史/断线重发由 T3/T5 用例与 C-04 幂等断言覆盖。
+- [x] T-05（owner_stage=work；依赖T-04；AC-05）：使补充入口可执行、跑 C-01..05、原有双端任务与负控；整理 SD 候选，不以已有总数盖住新失败。 [✅ 2026-11-01] `tests/basic/verify_identity.py` 新增可执行：C-02 身份（注册/恢复/拒绝/轮换/撤销 15 断言）、C-03 隔离（字节级 7 断言）、C-04 迁移（v1 夹具现造+WAL 保真；cancel 零写入哈希不变/adopt 一次性/逐字一致/幂等/强杀重开 18 断言）、C-05 负控（放行型 stub 使门红 red=4，区分性成立）。**总门 41/41 PASS**（verify-identity.json）。C-01 由 verify_basic 双 profile 承载。SD 候选按实际实现细化见 §5 规范增量表（SD-01/SD-02 措辞与实现一致：secret 256-bit/会话轮换/退出撤销/VACUUM INTO 备份/CHAT_LEGACY_ADOPT 门控）。
+- [x] T-06（owner_stage=work；依赖T-05；AC-01..05）：核对源/依赖漂移、凭据零泄漏、所有必需 oracle 与 README/roadmap，提交 execution_done 交接。 [✅ 2026-11-01] 漂移盘点：auto-lang master `eda930b0`（Plan 907+2 riders）、auto-man `55c98c7`、auto-web `ec9c4ba`（被引文件与 §4 一致）、auto-ui `6ab7f2d`；本仓交付面 hash 记录于 §9。零泄漏审计：后端 .at 无任何日志/打印；secret 不进 URL（0 命中）、不进日志；生成 main.rs 仅启动/绑定消息；GET query 携 token 为 CHAT-001 已记录框架边界（无自定义 header），随 SD-01 如实声明。README/roadmap 已同步凭据模型+验收入口+框架前置解除。必需 oracle 全部绑定实际入口（verify_basic 双 profile + verify_identity 41 断言 + 负控），无占位/跳过/历史总数顶替。
 - [ ] T-07（owner_stage=review；依赖T-06；AC-06）：同一 clone 的独立上下文最终复审，未满足项返回 work。
 - [ ] T-08（owner_stage=merge；依赖T-07 pass；AC-07）：仅 app 文档/Spec/归档/提交 push 与恢复记录收尾；不更新 AutoOS。
 
@@ -122,10 +122,11 @@ T-00 优先核验当前 SDK 认证、随机数、摘要与会话能力，冻结�
 
 - stage: new | plan_id: CHAT-002 | plan_revision: 1 | outcome: pass（仅有界 T-00 就绪，产品与双端验收未执行） | next: work/T-00（等待后续实施指令）。
 - 现有归档计划、Spec 与源码保持原样；旧验收只证明其冻结版本与已声明范围。应用提交/push 不升级 AutoOS 组合版本。
+- stage: work | plan_id: CHAT-002 | plan_revision: r1 | round: 2 | from: work（blocked 续做） | to: review | status: execution_done | outcome: pass（T-02/03/04/05/06 全交付；T-07/T-08 归 review/merge） | worktree: D:/autostack/auto-chat（main，本计划约定 clone） | base_commit: 4c1639c | dependency_revisions: auto-lang master `eda930b0`（Plan 907 `9381e0746`/`6ee01e0a6` + riders `ed38cf973`/`eda930b09`）、auto-man `55c98c7`、auto-web `ec9c4ba`、auto-ui `6ab7f2d`；工具链二进制重建（auto.exe、auto-ui-tools） | task_ids: T-02, T-03, T-04, T-05, T-06 | evidence: C-04 反例先行 c04-prefix.out + probe-baseline.out（迁移前接管/泄露）；迁移/凭据回放 C04 ALL-PASS 18/18（replay_c04.py）；认证门 verify-identity.json **41/41**（C-02 15/C-03 7/C-04 18/C-05 负控 red=4）；双端回归 verify-vue.json 8/8、verify-vm.json 4/4（凭据模型更新后的 smoke/vm 脚本）；smoke fresh 11/11 + legacy-closed 2/2（smoke_v2_auth.py）；零泄漏审计（secret 不入 URL/日志；GET query token 为 001 已记录边界）；交付 hash：api.at 8773ac4e、db.at 9b595df8、repository.at 73396d86、chat_store.at f51a8e2a、app.at 57541ce2、smoke.spec.ts 55a73d6c、verify_identity.py 299cfab3、vm-basic.mjs ce737a00 | blockers: 无（P-REQ-1 已解除并记录于 §10） | next_responsible_role: review（T-07 独立上下文最终复审，AC-06）
 - stage: work | plan_id: CHAT-002 | plan_revision: r1 | round: 1 | from: drafting | to: work（继续） | status: executing | outcome: blocked（部分交付：T-00/T-01/T-03 完成，T-02 及下游阻塞） | worktree: D:/autostack/auto-chat（main，本计划约定 clone） | commit: （本轮交付提交） | base_commit: 270e659 | dependency_revisions: auto-lang `b1a4871`、auto-web `ec9c4ba`（被引文件与 §4 一致）、auto-ui `6ab7f2d`、auto.exe `0.1.0+plan-890…`、rustc/cargo 1.98.0 | task_ids: T-00, T-01, T-03 | evidence: 决策稿 plan-002/standalone-decision.md sha256 26fe4456…；probe-baseline.out（C-02 同名接管 True、匿名/第三身份 SSE 收到私聊哨兵）；probe-post.out（流 404、零泄露、B 轮询收取 True）；verify-vue.json 8/8；verify-vm.json 4/4；api.at sha256 8c2cec4c…；verify_basic.py sha256 da8985a5…；vm-basic.mjs sha256 f466a1cb… | blockers: P-REQ-1（后端轨受支持 ≥128-bit 安全随机原语缺失——a2r-std 无 rand/digest/KDF；bundled SQLite Windows 种子非 CSPRNG；VM 轨 Xorshift 时间种子；本计划无框架写入权）→ T-02/T-04/T-05/T-06 阻塞 | incident: VM 预跑污染 APPDATA 默认库两行身份，已备份并清零复核（APPDATA 现 0 行） | next_responsible_role: auto-lang owner（P-REQ-1）→ work（T-02 起解阻续做）。
 
 ## 10. 待澄清事项
 
 本次规划没有待用户重新确认的产品方向。T-00 负责核实技术能力与实际 owner，决策稿必须先闭合再进入依赖实现。若探针显示必须改变目标、降低必需验收或扩大跨仓写入范围，报告具体证据并保留受影响任务未完成；不得用占位、跳过、API 预操作或历史总数替代必需用户任务。
 
-**阻塞（2026-11-01，等待外部解除）**：P-REQ-1——后端轨缺受支持 ≥128-bit 安全随机原语，T-02（凭据/会话）及 T-04..T-06 无法在不自创密码学、不用 shell 拼 token 的前提下诚实实施。精确解除动作：auto-lang owner 按其仓 Plan/worktree 规约为 a2r-std 增加基于 OS CSPRNG 的 `secure_hex(n)`（及 stdlib `.at` 后端轨声明，如 `use auto.rand`）。P-REQ-1 落地后本计划续做 T-02（先建 C-04 反例→迁移→凭据→回放）。可选 P-REQ-2（仅未来密码方案需要）：后端轨 KDF——当前 profile 不选密码，非必需。
+**已解除（2026-11-01）**：P-REQ-1 经用户目标指令授权后由实际 owner 仓按其规约交付——auto-lang Plan 907（`a2r_std::rand::secure_hex`，OS CSPRNG；归档 `6ee01e0a6`）+ i64 签名修正 `ed38cf973` + codegen standalone face `eda930b09`；auto-man CLI 死 feature 消费修复 `55c98c7`。本计划凭据/迁移/门禁全部落地（见 §9 round 2 回执）。可选 P-REQ-2（KDF）仍非必需——当前 profile 不选密码。

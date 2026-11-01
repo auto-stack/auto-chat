@@ -35,7 +35,9 @@ store ChatStore {
         var active_peer_avatar str = ""
         var active_peer_status str = ""
         var login_name str = ""
+        var login_secret str = ""
         var login_error str = ""
+        var show_secret str = ""
         var login_busy bool = false
         var online bool = true
         var typing_name str = ""
@@ -45,42 +47,114 @@ store ChatStore {
         var send_seq int = 0
     }
 
-    msg { Login(str), SelectContact(str), OpenIdentity(str), Search(str), SendText(str), RetrySend(str), NewSendResult(SendResult), NewLoginAck(LoginAck), Typing(TypingEvent), RefreshTick, MarkTyping }
+    msg { Login(str), Register(str), Logout, DismissSecret, SelectContact(str), OpenIdentity(str), Search(str), SendText(str), RetrySend(str), NewSendResult(SendResult), NewLoginAck(LoginAck), Typing(TypingEvent), RefreshTick, MarkTyping }
 
     on {
+        // 登录/恢复（CHAT-002）：name + secret 精确匹配，token 仅随响应交付
         .Login(name) -> {
             if name != "" {
                 if .login_busy == false {
                     .login_busy = true
                     .login_error = ""
-                    // nonce 为客户端生成 ASCII 一次性认领凭据（token 只经 me 响应交付）
-                    var nonce str = "n-" + .send_seq.to_string() + "-" + .my_id
-                    .send_seq = .send_seq + 1
-                    var esc_name str = name.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
-                    if Env.track() != "vue" {
-                        try { Http.post("/api/login", "{\"name\":\"" + esc_name + "\",\"nonce\":\"" + nonce + "\"}") } catch { }
+                    if .login_secret == "" {
+                        .login_error = "请输入恢复凭据（注册时保存的 secret）"
                     } else {
-                        try { Http.post("/api/login", { name: name, nonce: nonce }) } catch { }
-                    }
-                    try {
-                        var m = json.to_value(Http.get_json("/api/me?nonce=" + nonce))
-                        .my_id = m.id
-                        .my_name = m.name
-                        .my_avatar = m.avatar
-                        .my_token = m.token
-                        .online = true
-                        if .my_id == "" {
-                            .login_error = "登录失败：名字无效或服务器拒绝"
+                        var esc_name str = name.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                        var esc_sec str = .login_secret.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                        try {
+                            var m = []
+                            if Env.track() != "vue" {
+                                m = json.to_value(Http.post("/api/login", "{\"name\":\"" + esc_name + "\",\"secret\":\"" + esc_sec + "\"}"))
+                            } else {
+                                m = json.to_value(Http.post("/api/login", { name: name, secret: .login_secret }))
+                            }
+                            if m.ok {
+                                .my_id = m.id
+                                .my_name = m.name
+                                .my_avatar = m.avatar
+                                .my_token = m.token
+                                .online = true
+                                .login_secret = ""
+                            } else {
+                                .login_error = "登录失败：名字或恢复凭据不正确"
+                            }
+                        } catch {
+                            .online = false
+                            .login_error = "连接失败：后端不可达"
                         }
-                    } catch {
-                        .online = false
-                        .login_error = "连接失败：后端不可达（17823）"
                     }
                     .login_busy = false
                 }
             } else {
                 .login_error = "请输入名字"
             }
+        }
+        // 注册（CHAT-002）：服务器铸造 256-bit 恢复凭据，一次性展示
+        .Register(name) -> {
+            if name != "" {
+                if .login_busy == false {
+                    .login_busy = true
+                    .login_error = ""
+                    var esc_name str = name.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
+                    try {
+                        var m = []
+                        if Env.track() != "vue" {
+                            m = json.to_value(Http.post("/api/register", "{\"name\":\"" + esc_name + "\"}"))
+                        } else {
+                            m = json.to_value(Http.post("/api/register", { name: name }))
+                        }
+                        if m.ok {
+                            .my_id = m.id
+                            .my_name = m.name
+                            .my_avatar = m.avatar
+                            .my_token = m.token
+                            .show_secret = m.secret
+                            .online = true
+                            .login_secret = ""
+                        } else {
+                            if m.err == "name-taken" {
+                                .login_error = "该名字已注册：请用恢复凭据登录，或换一个名字"
+                            } else {
+                                .login_error = "注册失败：名字无效或服务器拒绝"
+                            }
+                        }
+                    } catch {
+                        .online = false
+                        .login_error = "连接失败：后端不可达"
+                    }
+                    .login_busy = false
+                }
+            } else {
+                .login_error = "请输入名字"
+            }
+        }
+        // 退出：服务端撤销本会话 token + 本端清空（恢复凭据由用户自行保存）
+        .Logout -> {
+            if .my_token != "" {
+                if Env.track() != "vue" {
+                    try { Http.post("/api/logout", "{\"token\":\"" + .my_token + "\"}") } catch { }
+                } else {
+                    try { Http.post("/api/logout", { token: .my_token }) } catch { }
+                }
+            }
+            .my_id = ""
+            .my_name = ""
+            .my_avatar = ""
+            .my_token = ""
+            .active_contact_id = ""
+            .active_peer_name = ""
+            .active_peer_avatar = ""
+            .active_peer_status = ""
+            .conv_list = []
+            .peer_list = []
+            .messages = []
+            .pending = []
+            .show_secret = ""
+            .login_name = ""
+            .login_secret = ""
+        }
+        .DismissSecret -> {
+            .show_secret = ""
         }
         .SelectContact(id) -> {
             if id != "" {
