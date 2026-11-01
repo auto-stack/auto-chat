@@ -4,11 +4,9 @@
 
 ## 当前能力与边界
 
-[CHAT-001](docs/plans/archived/001-real-conversations.md) 已交付归档：联系人、一对一文字收发、会话隔离、失败重发、SQLite 历史与重开；原验收 Vue 8/8、VM 4/4。现实现合同见[基本能力规范](docs/specs/chat/basic-capabilities.md)。
+[CHAT-001](docs/plans/archived/001-real-conversations.md) 已交付归档：联系人、一对一文字收发、会话隔离、失败重发、SQLite 历史与重开。现实现合同见[基本能力规范](docs/specs/chat/basic-capabilities.md)。
 
-当前名字登录不是可靠的身份认证，旧 token 可预测；SSE 单总线会把消息载荷送到非参与连接。仅按已声明的本机/可信测试范围理解旧结果，不能据 UI 隐藏声明私聊隔离已完成。
-
-后续 [CHAT-002：独立启动、身份凭据与会话数据隔离](docs/plans/002-standalone-identity-and-isolation.md) 为 drafting/r1、0/9，**尚未实施**。优先复用现有认证/随机能力及鉴权轮询，只有服务器可定向隔离时才保留私密 SSE；补齐独立原生启动、受控旧库迁移和真实三身份反例。
+[CHAT-002](docs/plans/002-standalone-identity-and-isolation.md) 进行中（executing，3/9）：T-00 决策稿、T-01 自管隔离验收门、T-03 移除公开 SSE 私聊旁路（送达统一为已鉴权按会话轮询，Vue/VM 双轨 8/8、4/4 回归通过）已交付。**身份凭据部分阻塞**：当前工具链后端轨不存在受支持的 ≥128-bit 安全随机原语（a2r-std 无 rand；bundled SQLite Windows 种子非 CSPRNG），最小前置 P-REQ-1 已提请 auto-lang owner，见计划 §10。
 
 ## 运行与验证
 
@@ -23,9 +21,10 @@ $env:AUTO_HTTP_BASE = 'http://127.0.0.1:17823'
 auto run -r vm
 ```
 
-这项手工后端依赖和冷构建就绪问题由002接续，当前不承诺全新环境一次命令即完成。数据目录使用 `CHAT_DATA_DIR` 覆盖；不要对真实用户库运行测试或 reset。
+数据目录使用 `CHAT_DATA_DIR` 覆盖；不要对真实用户库运行测试或 reset。
 
-现有双端入口：`python tests/basic/verify_basic.py --profile vue` / `--profile vm`。它依赖事先准备的隔离服务；旧 reset 返回200不充分证明测试模式，002将补自管PID/数据根/模式校验。新增认证门在002实施后才可运行。
+双端验收入口（CHAT-002 T-01 起自管隔离门，无需外部预启动服务）：
+`python tests/basic/verify_basic.py --profile vue` / `--profile vm`。脚本自管准备（有界 auto build + cargo build）、随机端口、隔离 `CHAT_DATA_DIR` 与端口→PID 归属检查，仅收割本次子树；证据 JSON 落 `D:/autostack/plan-artifacts/plan-002/`（本地，不入库）。新增认证门仍待 002 的框架前置（见上）。
 
 ## 计划与开发
 

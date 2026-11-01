@@ -67,10 +67,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   const bin = process.env.AUTO_BIN || "D:/autostack/auto-man/target/debug/auto.exe";
-  console.log(`[vm-basic] auto bin: ${bin} (render=vm, reuse backend :17823)`);
+  // 后端端口可由 verify_basic.py（自管隔离门）注入；默认沿用历史 17823。
+  const BACK_PORT = process.env.AUTO_HTTP_PORT || "17823";
+  console.log(`[vm-basic] auto bin: ${bin} (render=vm, reuse backend :${BACK_PORT})`);
   const child = spawn(bin, ["run", "-r", "vm"], {
     cwd: REPO_ROOT,
-    env: { ...process.env, AUTO_REUSE_BACKEND: "1", AUTO_HTTP_PORT: "17823", AUTO_HTTP_BASE: "http://127.0.0.1:17823", AUTOUI_MCP_PORT: String(MCP_PORT), RUST_MIN_STACK: "16777216", RUST_BACKTRACE: "1" },
+    env: { ...process.env, AUTO_REUSE_BACKEND: "1", AUTO_HTTP_PORT: BACK_PORT, AUTO_HTTP_BASE: `http://127.0.0.1:${BACK_PORT}`, AUTOUI_MCP_PORT: String(MCP_PORT), RUST_MIN_STACK: "16777216", RUST_BACKTRACE: "1" },
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
   });

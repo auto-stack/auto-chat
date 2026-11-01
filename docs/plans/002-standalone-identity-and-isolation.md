@@ -1,12 +1,12 @@
 ---
 plan_id: CHAT-002
-status: drafting
+status: executing
 feature_name: "独立启动、身份凭据与会话数据隔离"
 author: [Codex]
 created_at: 2026-10-31
-updated_at: 2026-10-31
+updated_at: 2026-11-01
 plan_revision: 1
-current_step: 0
+current_step: 3
 total_steps: 9
 base_branch: main
 base_commit: 992067fc2313932e0a6683142630569f5f6df477
@@ -108,13 +108,13 @@ T-00 优先核验当前 SDK 认证、随机数、摘要与会话能力，冻结�
 
 ## 8. 执行步骤
 
-- [ ] T-00（owner_stage=work；依赖001已交付；AC-01/02/03）：在本 clone 冻结当前源/工具，完成 §5 决策稿和最小可行性探针；先关闭身份/迁移/送达及冷准备决策，缺项转实际 owner 最小前置。
-- [ ] T-01（owner_stage=work；依赖T-00；AC-01/05）：复用既有调度器，补独立准备/启动与本次 PID/端口/数据根身份检查、无副作用的测试模式验证，提供空缓存与错误记录。
-- [ ] T-02（owner_stage=work；依赖T-00；AC-02/04）：在 repository/API 及现有前端 store 接入冻结凭据/会话、受控旧库迁移，先建立 C-02/C-04 反例再实现并回放。
-- [ ] T-03（owner_stage=work；依赖T-02及必要已交付前置；AC-03）：落实定向流或鉴权轮询，关闭公开私密广播旁路；保存 C-03 原始字节级证据。
-- [ ] T-04（owner_stage=work；依赖T-01/02/03；AC-01/04）：真实双客户端 Vue/VM 联系人、失败重发、退出重开与下一次发送；保持输入/幂等/历史回归。
-- [ ] T-05（owner_stage=work；依赖T-04；AC-05）：使补充入口可执行、跑 C-01..05、原有双端任务与负控；整理 SD 候选，不以已有总数盖住新失败。
-- [ ] T-06（owner_stage=work；依赖T-05；AC-01..05）：核对源/依赖漂移、凭据零泄漏、所有必需 oracle 与 README/roadmap，提交 execution_done 交接。
+- [x] T-00（owner_stage=work；依赖001已交付；AC-01/02/03）：在本 clone 冻结当前源/工具，完成 §5 决策稿和最小可行性探针；先关闭身份/迁移/送达及冷准备决策，缺项转实际 owner 最小前置。 [✅ 2026-11-01] 决策稿 `D:/autostack/plan-artifacts/plan-002/standalone-decision.md`（sha256 `26fe4456…`）；§4 六项源 hash 逐字零漂移；auto-web HEAD 前进至 `ec9c4ba` 但被引 api_gen.rs/server_route.rs 字节一致，SSE 单总线结论重核成立。关键裁定：后端轨（a2r-std，path-pin 同源 auto-lang `b1a4871`）无 rand/无 digest/无 KDF（lib.rs 模块面实证；uuid()=epoch 纳秒 hex；simple_hash=SipHash）；bundled SQLite（libsqlite3-sys 0.27）PRNG 为 ChaCha20 但 winRandomness 种子仅 SYSTEMTIME+PID+tick+QPC（SQLITE_WIN32_USE_UUID 未定义，无 CSPRNG 输入）→ 非受支持 128-bit 熵源；VM 轨 Random 实为 SystemTime 纳秒 Xorshift64。**受支持安全随机原语缺失 → T-02 及下游阻塞，P-REQ-1 已提请 auto-lang owner（见 §10）**。
+- [x] T-01（owner_stage=work；依赖T-00；AC-01/05）：复用既有调度器，补独立准备/启动与本次 PID/端口/数据根身份检查、无副作用的测试模式验证，提供空缓存与错误记录。 [✅ 2026-11-01] `tests/basic/verify_basic.py` 重构为自管隔离门（有界 auto build/cargo build 准备、随机空闲端口、隔离 CHAT_DATA_DIR、端口→PID 归属断言、只读就绪探针、仅收割本次子树）；`tests/basic/vm-basic.mjs` 硬编码 17823 改为 env 透传。冷构建实测 210s（≤300s 门）。vue 8/8、vm 4/4 经新调度器全绿（证据 `plan-002/verify-{vue,vm}.json`）。VM 轨 `auto run` 每次重生成触发 relink 文件锁 → 调度器以副本 exe 启动后端规避。事故记录：一次 VM 预跑因本脚本未传 AUTO_HTTP_PORT，auto run 在 ：17823 以默认 APPDATA 数据根拉起后端写入测试身份两行；已备份至 `plan-002/appdata-pollution-backup-chat.db` 并逐表清零复核（APPDATA 现为 0 行）。
+- [ ] T-02（owner_stage=work；依赖T-00；AC-02/04）：在 repository/API 及现有前端 store 接入冻结凭据/会话、受控旧库迁移，先建立 C-02/C-04 反例再实现并回放。 **阻塞：P-REQ-1（后端轨受支持安全随机）**。C-02 反例已存证（plan-002/probe-baseline.out：同名接管 True、token 形如 tok-u-<n>-<epoch>）；迁移设计已冻结（决策稿 §4：fs.copy 备份→事务 ALTER+status='legacy'→env 门控一次性 adopt）。
+- [ ] T-03（owner_stage=work；依赖T-02及必要已交付前置；AC-03）：落实定向流或鉴权轮询，关闭公开私密广播旁路；保存 C-03 原始字节级证据。 [✅ 2026-11-01] 移除 /api/stream + ChatEvent/TypingSignal（api.at sha256 `8c2cec4c…`）；生成物核验：无 /api/stream 路由、events.rs 零 broadcast 调用方（has_sse 面 ＝ 404）。字节级证据两相：baseline（probe-baseline.out）匿名与第三身份 SSE 均收到私聊正文哨兵（泄露实证）→ post（probe-post.out）流 404、零泄露、B 轮询正常收取。送达=已鉴权按会话轮询（token 校验读写保持）；重连/退出后旧会话字节面复验归 T-05 门。token 强度升级随 T-02（P-REQ-1）。
+- [ ] T-04（owner_stage=work；依赖T-01/02/03；AC-01/04）：真实双客户端 Vue/VM 联系人、失败重发、退出重开与下一次发送；保持输入/幂等/历史回归。 **阻塞（依赖 T-02）**。既有回归基线已在新送达通道下复验：Vue 8/8、VM 4/4（含 T6 经 1s 轮询 3s 内送达；用例名待 T-05 正名）。
+- [ ] T-05（owner_stage=work；依赖T-04；AC-05）：使补充入口可执行、跑 C-01..05、原有双端任务与负控；整理 SD 候选，不以已有总数盖住新失败。 **阻塞（依赖 T-02/04）**；verify_identity.py 拟新增，probe_identity_isolation.py 已备其骨架。
+- [ ] T-06（owner_stage=work；依赖T-05；AC-01..05）：核对源/依赖漂移、凭据零泄漏、所有必需 oracle 与 README/roadmap，提交 execution_done 交接。 **阻塞（依赖 T-05）**；README 现状已随本轮交付同步（自管门 + SSE 移除 + 阻塞状态）。
 - [ ] T-07（owner_stage=review；依赖T-06；AC-06）：同一 clone 的独立上下文最终复审，未满足项返回 work。
 - [ ] T-08（owner_stage=merge；依赖T-07 pass；AC-07）：仅 app 文档/Spec/归档/提交 push 与恢复记录收尾；不更新 AutoOS。
 
@@ -122,7 +122,10 @@ T-00 优先核验当前 SDK 认证、随机数、摘要与会话能力，冻结�
 
 - stage: new | plan_id: CHAT-002 | plan_revision: 1 | outcome: pass（仅有界 T-00 就绪，产品与双端验收未执行） | next: work/T-00（等待后续实施指令）。
 - 现有归档计划、Spec 与源码保持原样；旧验收只证明其冻结版本与已声明范围。应用提交/push 不升级 AutoOS 组合版本。
+- stage: work | plan_id: CHAT-002 | plan_revision: r1 | round: 1 | from: drafting | to: work（继续） | status: executing | outcome: blocked（部分交付：T-00/T-01/T-03 完成，T-02 及下游阻塞） | worktree: D:/autostack/auto-chat（main，本计划约定 clone） | commit: （本轮交付提交） | base_commit: 270e659 | dependency_revisions: auto-lang `b1a4871`、auto-web `ec9c4ba`（被引文件与 §4 一致）、auto-ui `6ab7f2d`、auto.exe `0.1.0+plan-890…`、rustc/cargo 1.98.0 | task_ids: T-00, T-01, T-03 | evidence: 决策稿 plan-002/standalone-decision.md sha256 26fe4456…；probe-baseline.out（C-02 同名接管 True、匿名/第三身份 SSE 收到私聊哨兵）；probe-post.out（流 404、零泄露、B 轮询收取 True）；verify-vue.json 8/8；verify-vm.json 4/4；api.at sha256 8c2cec4c…；verify_basic.py sha256 da8985a5…；vm-basic.mjs sha256 f466a1cb… | blockers: P-REQ-1（后端轨受支持 ≥128-bit 安全随机原语缺失——a2r-std 无 rand/digest/KDF；bundled SQLite Windows 种子非 CSPRNG；VM 轨 Xorshift 时间种子；本计划无框架写入权）→ T-02/T-04/T-05/T-06 阻塞 | incident: VM 预跑污染 APPDATA 默认库两行身份，已备份并清零复核（APPDATA 现 0 行） | next_responsible_role: auto-lang owner（P-REQ-1）→ work（T-02 起解阻续做）。
 
 ## 10. 待澄清事项
 
 本次规划没有待用户重新确认的产品方向。T-00 负责核实技术能力与实际 owner，决策稿必须先闭合再进入依赖实现。若探针显示必须改变目标、降低必需验收或扩大跨仓写入范围，报告具体证据并保留受影响任务未完成；不得用占位、跳过、API 预操作或历史总数替代必需用户任务。
+
+**阻塞（2026-11-01，等待外部解除）**：P-REQ-1——后端轨缺受支持 ≥128-bit 安全随机原语，T-02（凭据/会话）及 T-04..T-06 无法在不自创密码学、不用 shell 拼 token 的前提下诚实实施。精确解除动作：auto-lang owner 按其仓 Plan/worktree 规约为 a2r-std 增加基于 OS CSPRNG 的 `secure_hex(n)`（及 stdlib `.at` 后端轨声明，如 `use auto.rand`）。P-REQ-1 落地后本计划续做 T-02（先建 C-04 反例→迁移→凭据→回放）。可选 P-REQ-2（仅未来密码方案需要）：后端轨 KDF——当前 profile 不选密码，非必需。
