@@ -14,8 +14,9 @@
 //   （UI 校验拒绝）；跨模块自由函数（store 不可解析）；视图模板内自由函数
 //   （Vue 无绑定）；字符串+int 直接拼接（VM 抛错）——数字一律 .to_string()
 //   或 f-string 后再拼（musk secretary_helpers 先例）。
-// - 送达：Vue 轨 SSE NewSendResult 实时推送 + 1s RefreshTick 兜底；VM 轨无
-//   SSE 源（P-15），RefreshTick 即送达通道。
+// - 送达：已鉴权按会话轮询（1s RefreshTick，双轨一致；CHAT-002 移除公开
+//   SSE 单总线——私聊载荷不得投给任意连接）。client_msg_id 只由
+//   seq+my_id 构成，绝不含 token（F-1：元数据会回给对端）。
 // - 发送状态机：pending（sending/failed）→ 应答 ok 落定；失败保留文本可重发；
 //   重试复用同一 client_msg_id（服务器 UNIQUE 去重，已确认消息不重复落库）。
 // - 会话隔离：消息按 conversation_id 请求/过滤；切换会话即切换数据源。
@@ -47,7 +48,7 @@ store ChatStore {
         var send_seq int = 0
     }
 
-    msg { Login(str), Register(str), Logout, DismissSecret, SelectContact(str), OpenIdentity(str), Search(str), SendText(str), RetrySend(str), NewSendResult(SendResult), NewLoginAck(LoginAck), Typing(TypingEvent), RefreshTick, MarkTyping }
+    msg { Login(str), Register(str), Logout, DismissSecret, SelectContact(str), OpenIdentity(str), Search(str), SendText(str), RetrySend(str), RefreshTick, MarkTyping }
 
     on {
         // 登录/恢复（CHAT-002）：name + secret 精确匹配，token 仅随响应交付
@@ -231,7 +232,7 @@ store ChatStore {
             if text != "" {
                 if .my_token != "" {
                     if .active_contact_id != "" {
-                        var cid str = "cm-" + .send_seq.to_string() + "-" + .my_token
+                        var cid str = "cm-" + .send_seq.to_string() + "-" + .my_id
                         .send_seq = .send_seq + 1
                         var esc_new str = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
                         var p_new = json.parse("{\"client_msg_id\":\"" + cid + "\",\"text\":\"" + esc_new + "\",\"state\":\"sending\"}")
@@ -387,44 +388,6 @@ store ChatStore {
                     }
                 }
             }
-        }
-        .NewSendResult(sr) -> {
-            // Vue 轨 SSE 实时推送：发送者确认 + 对端送达；VM 轨无源（P-15）
-            if sr.ok {
-                var cid str = sr.message.client_msg_id
-                var keep = []
-                for pp in .pending {
-                    if pp.client_msg_id != cid {
-                        keep.push(pp)
-                    }
-                }
-                .pending = keep
-                if sr.message.conversation_id == .active_contact_id {
-                    var exists bool = false
-                    var kept = []
-                    for m in .messages {
-                        if m.client_msg_id == cid {
-                            exists = true
-                            kept.push(sr.message)
-                        } else {
-                            kept.push(m)
-                        }
-                    }
-                    if exists {
-                        .messages = kept
-                    } else {
-                        .messages.push(sr.message)
-                    }
-                }
-            }
-        }
-        .NewLoginAck(ack) -> {
-            // 在线名单变更信号；1s RefreshTick 统一刷新
-            .online = .online
-        }
-        .Typing(evt) -> {
-            .typing_name = evt.name
-            .typing_until = Time.now_ms() + 3000
         }
         .RefreshTick -> {
             if .typing_until > 0 {

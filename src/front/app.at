@@ -76,7 +76,7 @@ widget App {
                         style: "w-full px-5 py-2 bg-card text-foreground rounded-xl text-sm font-medium border border-border hover:bg-accent transition-colors"
                     }
                     if .store.online == false {
-                        text "连接断开：请确认后端已在 17823 运行" { style: "text-xs text-muted-foreground" }
+                        text "连接断开：请确认后端已启动" { style: "text-xs text-muted-foreground" }
                     }
                 }
             }

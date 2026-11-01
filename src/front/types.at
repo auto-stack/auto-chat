@@ -49,16 +49,6 @@ type Message {
     client_msg_id str
 }
 
-type SendResult {
-    ok bool
-    err str
-    message Message
-}
-
-type TypingEvent {
-    name str
-}
-
 /// 客户端待确认消息（sending/failed；确认后从 store.pending 移除）。
 type PendingMsg {
     client_msg_id str

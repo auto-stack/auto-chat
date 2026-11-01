@@ -153,7 +153,8 @@ pub fn list_messages(token str, conversation_id str) []Message {
 }
 
 /// POST /api/messages — 发送。token 解析发送者（不信任任何 sender 字段）；
-/// client_msg_id 唯一约束保证重试幂等；成功即落库 + 广播 NewSendResult。
+/// client_msg_id 唯一约束保证重试幂等；成功落库，对端经已鉴权轮询收取
+/// （client_msg_id 只回给发送者本人——元数据不外泄，见 repository.message_rows）。
 #[api(method = "POST", path = "/api/messages")]
 pub fn send_message(token str, conversation_id str, text str, client_msg_id str) SendResult {
     return db.send_message(token, conversation_id, text, client_msg_id)

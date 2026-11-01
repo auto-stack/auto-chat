@@ -186,6 +186,24 @@ def c03(scratch):
         st, ids = api("GET", "/api/identities")
         note("C-03 公开身份面不含 secret/token",
              all("secret" not in json.dumps(i) and "token" not in json.dumps(i) for i in ids))
+        # F-1 回归断言（双层）：
+        # (i) 源 tripwire——client_msg_id 构造不含会话 token（.at 源文本级）
+        store_src = (ROOT / "src" / "front" / "chat_store.at").read_text(encoding="utf-8")
+        note("C-03 源检：cmid 构造为 seq+my_id（无 token）",
+             ('"cm-" + .send_seq.to_string() + "-" + .my_id' in store_src)
+             and ('"cm-" + .send_seq.to_string() + "-" + .my_token' not in store_src))
+        # (ii) 服务器元数据擦除：即使发送方 cmid 内嵌其 token（旧客户端形状），
+        #     对端字节面也不得出现该 token；本人视图保留 cmid（本地去重键）
+        leaked_cmid = a["token"]
+        st, s2 = api("POST", "/api/messages", {"token": a["token"], "conversation_id": conv["id"],
+                                               "text": "元数据擦除探针", "client_msg_id": leaked_cmid})
+        note("C-03 探针发送成功", s2.get("ok") is True)
+        st, bview = api("GET", f"/api/messages?token={b['token']}&conversation_id={conv['id']}")
+        note("C-03 对端字节面不含发送方会话 token（服务器擦除）",
+             a["token"] not in json.dumps(bview, ensure_ascii=False))
+        st, aview = api("GET", f"/api/messages?token={a['token']}&conversation_id={conv['id']}")
+        note("C-03 本人视图保留 cmid（去重键不破坏）",
+             any(m.get("client_msg_id") == leaked_cmid for m in aview))
     finally:
         stop(p)
 
@@ -389,7 +407,7 @@ def c05(scratch):
     try:
         passed, total = gate_against_stub(port)
         red = total - passed
-        note("C-05 stub 使门变红的断言数 ≥3", red >= 3, f"passed {passed}/{total}")
+        note("C-05 stub 使门全红（4/4 区分性）", red == 4, f"passed {passed}/{total}")
         note("C-05 stub 下总门非零（区分性成立）", passed < total, f"red={red}")
     finally:
         srv.shutdown()

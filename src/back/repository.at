@@ -561,7 +561,10 @@ pub fn message_rows(token str, conversation_id str) List<List<str>> {
     var now int = now_sec()
     var mine str = sql_str(my_id)
     var conv str = sql_str(conversation_id)
-    var rows List<List<str>> = db.query("SELECT m.id, m.conversation_id, m.sender_id, m.sender_name, m.text, m.created_sec, m.client_msg_id FROM messages m WHERE m.conversation_id = " + conv + " AND (" + mine + " IN (SELECT user_a FROM conversations WHERE id = " + conv + ") OR " + mine + " IN (SELECT user_b FROM conversations WHERE id = " + conv + ")) ORDER BY m.id")
+    // CHAT-002 F-1 纵深防御：client_msg_id 只回给发送者本人（对端/第三方
+    // 置空）——该字段是客户端本地去重键，不含跨端语义，绝不能成为凭据或
+    // 本端标识的旁路元数据。
+    var rows List<List<str>> = db.query("SELECT m.id, m.conversation_id, m.sender_id, m.sender_name, m.text, m.created_sec, CASE WHEN m.sender_id = " + mine + " THEN m.client_msg_id ELSE '' END FROM messages m WHERE m.conversation_id = " + conv + " AND (" + mine + " IN (SELECT user_a FROM conversations WHERE id = " + conv + ") OR " + mine + " IN (SELECT user_b FROM conversations WHERE id = " + conv + ")) ORDER BY m.id")
     var i int = 0
     while i < rows.len() {
         var r List<str> = rows[i]
