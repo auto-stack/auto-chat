@@ -45,3 +45,16 @@ auto run -r vm
 ## 来源与组合
 
 来源提交与文件 hash 见 `SOURCE-IMPORT.json`；历史 `source-sync` 保留来源基线。AutoOS 组合目录为 [apps/auto-chat](https://github.com/auto-stack/auto-os/tree/main/apps/auto-chat)，其 pin 可能落后本仓，不作为默认开发目录。旧 Demo 目录仅属历史。
+
+## 主题（auto-os/PLAN-056 接入）
+
+本产品已接入 AutoUI **官方主题包**正式消费面（2026-11-03，PLAN-056 T-02）：
+
+- `vendor/themes` 为 UI 管理渠道发布的固定版本快照（`themes` 0.2.0，内容
+  digest `9fa07742dc68aa5377ae06cb2d966386002063f184c515b6c5dddf8a6bef838e`），
+  经 `pac.at` `dep themes` 消费；快照不可二次编辑、非第二权威源。
+- 主合同在 **auto-os/PLAN-056**：本产品 pac 无 `theme` 键 = **follow 宿主**；
+  `src/front/app.at` `design { theme: "Auto", mode: "light" }` 为独立默认腿
+  ——本产品无 dark_mode 位（认证/会话/凭据隔离业务不含外观状态），静态
+  light 保现默认语义；`use themes.themes: Auto` 注册收集链（C-11 合同）。
+  Rust secure_hex 身份/凭据隔离原样。
