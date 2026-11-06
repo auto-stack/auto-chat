@@ -1,12 +1,12 @@
 ---
 plan_id: CHAT-003
-status: execution_done
+status: reviewed
 feature_name: 重开后新消息与失败重试编号隔离
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 2
+current_step: 3
 total_steps: 4
 base_branch: main
 base_commit: 378a7f2fb99eb2f8954f13ec73ae2d4346ec20da
@@ -63,7 +63,7 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
 
 - [x] T00(work)：纯.at后端前缀与前端新意图/缺前缀拒绝，永久复现测试。实际C01 8断言、Vue T5/T9/T10 3通过，原生和最终artifact审查仍待T01/T02。
 - [x] T01(work)：C01..04实际双端/数据库控制，Spec更新，冻结提交。原生r5失败气泡→恢复→点击重发保留原key且只增一行，确切边界/哈希见round3。
-- [ ] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。
+- [x] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。final app artifact pass@69b093b；同实施上下文，非独立，不能替代054最终独立复审。
 - [ ] T03(merge)：push、归档、消费hold与清理回执，OS054更新固定pin。
 
 ## 9. 复审记录
@@ -92,3 +92,8 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
   R actual logout revokes its token to0; child27208 normal close0 with handle retained before Close, backend5640/Blog42120/old backend42272 live. Worker82088 credentials cleared/exit0; prior46904 cleared too. privacy-oracle.json checked37 text/log/JSON/HTML artifacts against currently stored synthetic secret/token values, zero matches; credentials never used from database for auth, private frames removed, trace/video/screenshots disabled. Coverage is current stored values plus controlled capture policy, not a universal retrospective audit of erased tokens.
   Scope evidence C01 real response8pass, C02 Vue T5/native observed failed→manual same-key recovery, C03 actual new-page/native normal close/reopen/newmessage keyprefixes0 differ, C04 Vue mocked missing field and actual native old source378a backend error/no composer; source/API auth/member/read/write functions unchanged in repository.at, so prior054 AB/C isolation retained within that unchanged boundary. Native old-backend control was on v11, its affected login/nonce/conditional code is unchanged by r5; reused scoped proof rather than restarting unrelated campaign. Added nonce RNG failure branch is before repository call by source inspection; no OS entropy fault-injection claimed, no broader new promise for pre-existing credential RNG/meta counter behavior.
   Implementation frozen and committed; tracked source clean, .auto is generated untracked cache only. Parent054 fixed pin still378a; owner preview is not launcher/fixed-pin acceptance. Parent054 owns final frozen SDK/mixed/failure/independent review, production backend provision and remaining framework landing. App T02 review will reconstruct from current artifacts in this same clone/context with that limitation explicitly stated; no independent app review is fabricated.
+
+- stage: review | review_scope: final app artifact | reviewer_identity: current Codex implementation session (same-context limitation; no independence claim) | plan_id: CHAT-003 | plan_revision: r1 | outcome: pass | worktree_path: D:/autostack/auto-chat | branch: main | reviewed_commit: 69b093bde01cfc6fe66413036847fe0bb7bbbd60 | base_commit: 378a7f2fb99eb2f8954f13ec73ae2d4346ec20da | next: merge/T03
+  Reconstructed from committed diff + actual oracle JSON/hashes + inspected public frames, not merely executor status. App-rule independent clone exception honored, only main tree listed, no tracked implementation drift; .auto is generated untracked runtime cache and not delivered. Sources5b9725f, subsequent docs-only; dependency Lang23f3a031/Man03bb65ef/UI8774c1c8 with hostc035; formal native1ae metadata/source inputs three-way match. Auth response independent secure_hex call and nonce-empty return precede repository invocation in both register/login; failed auth clears nonce. No schema/membership/send/read source changes (repository.at exact base equality). No token-derived IDs or new credential RNG. Input-level typed params, response extras and old-backend missing/null field path cover actual two profiles.
+  AC01→T00/C01 pass: actual response8 assertions plus static rejection-before-repository ordering for newly added nonce RNG failure; OS entropy injection not executed or claimed. AC02→T01/C02/C03 pass: Vue T5/T9, native normal close/reopen two different prefixes with seq0, native observed failed bubble→backend recovery→actual pointer retry preserves exact original seq2 key/text/sender and adds one row, final normal bubble and no duplicate after settle. AC03→C04/auth/privacy pass: Vue missing-field control + actual native old-backend error/no composer, scoped reuse of unchanged repository AB/C isolation from054r151, data preserved, secret/token artifact audit boundary explicitly recorded. AC04 implementation/Spec/docs ready: canonical Spec a4dc2b009c6b0ac3f756ba25a58a7555af89b1206ee43b43757021944af2d1f8 matches current tree, README links and delta reflect current behavior; touched_goals empty because this repairs existing app semantics with no registered new goal IDs. Publication/archive/consumer pin are merge-owned, not falsely marked done here.
+  Review reconstruction artifact review-reconstruction.json records the same69b baseline and verified oracle hashes. No implementation/Spec edits during review. Remaining merge gate: frozen affected auth/message/composer UI union (all10 smoke cases are justified by shared auth response/new-intent composer gating) + C01 on a newly isolated owned test backend; repository migration/legacy machinery and language full suites unchanged/out of this gate. Parent054 production backend lifetime, mixed/failure union, UI060/949 actual landing and independent final review remain parent-owned open criteria; this pass grants no parent completion or upstream framework delivery. Named parent-consumer retention will be recorded before app closeout. No outstanding work-owned finding is moved into debt.
