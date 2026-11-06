@@ -165,7 +165,11 @@ widget App {
                             my_id: .store.my_id,
                             on_retry: .RetrySend
                         )
-                        Composer(on_send: .SendMessage, on_typing: .Typing)
+                        if .store.send_nonce != "" {
+                            Composer(on_send: .SendMessage, on_typing: .Typing)
+                        } else {
+                            text .store.login_error { style: "text-sm text-destructive p-3" }
+                        }
                     }
                 }
             }

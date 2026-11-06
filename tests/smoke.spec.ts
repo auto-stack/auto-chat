@@ -242,3 +242,47 @@ test('T8: 控制台无实质错误', async ({ page }) => {
   const real = errors.filter(e => !e.includes('EventSource') && !e.includes('net::ERR'))
   expect(real, `实质错误: ${real.join('; ')}`).toHaveLength(0)
 })
+
+// CHAT-003: a new renderer/login starts its local sequence at zero, but it
+// must produce a new intent rather than replaying the old cm-0 identity key.
+test('T9: 重开恢复后第一条新消息不与旧意图碰撞', async ({ browser }) => {
+  await claimIdentity('恢复甲')
+  await claimIdentity('恢复乙')
+  const ctx = await browser.newContext()
+  let page = await ctx.newPage()
+  await login(page, '恢复甲')
+  await openConversationWith(page, '恢复乙')
+  await composerInput(page).fill('重开前第一条54.25')
+  const response = await Promise.all([
+    page.waitForResponse(r => r.url().includes('/api/messages') && r.request().method() === 'POST'),
+    page.getByRole('button', { name: '发送', exact: true }).click(),
+  ])
+  expect((await response[0].json()).ok).toBe(true)
+  await expect(page.locator('body')).toContainText('重开前第一条54.25')
+  await page.close()
+  page = await ctx.newPage()
+  await login(page, '恢复甲')
+  await openConversationWith(page, '恢复乙')
+  await expect(page.locator('body')).toContainText('重开前第一条54.25')
+  await composerInput(page).fill('重开后新意图8.125')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(page.locator('body')).toContainText('重开后新意图8.125', { timeout: 8000 })
+  await page.reload()
+  await login(page, '恢复甲')
+  await openConversationWith(page, '恢复乙')
+  await expect(page.getByText('重开后新意图8.125', { exact: true })).toHaveCount(1)
+  await ctx.close()
+})
+
+test('T10: 旧后端缺少消息前缀时具名拒绝新消息', async ({ page }) => {
+  await claimIdentity('兼容甲')
+  await page.route('**/api/login', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    delete body.send_nonce
+    await route.fulfill({ response, json: body })
+  })
+  await login(page, '兼容甲')
+  await expect(page.getByText('服务版本不兼容：请更新后端后重新登录', { exact: true })).toBeVisible()
+  await expect(composerInput(page)).toHaveCount(0)
+})

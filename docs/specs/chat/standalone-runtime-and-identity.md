@@ -68,3 +68,21 @@
 4. VM 轨 `auto.random` natives 为时间种子 Xorshift（auto-lang 侧已知），
    仅用于非凭据场景；后端轨凭据一律 `rand.secure_hex`。
 5. 送达粒度为 1s 轮询（双轨一致）；typing/在线外观信号随 SSE 移除而精简。
+
+## 6. 消息意图跨会话身份（CHAT-003）
+
+成功注册或恢复登录的响应新增 `send_nonce`，由后端独立调用既有
+`rand.secure_hex(32)` 生成。它是公开的新意图编号前缀，不是登录能力，
+不由secret/token派生。随机生成失败在仓储操作前返回entropy-failed；
+认证失败不交付前缀。旧客户端可忽略新增响应字段，SQLite无结构迁移。
+
+客户端用send_nonce＋当前会话序号＋身份ID生成新消息client_msg_id，成功登录
+后赋新前缀并从零计数，退出清前缀。重开后的首条新消息必须新增；失败重试
+仍复用pending中的原编号，服务器既有UNIQUE/参与者校验保持。同身份新登录
+仍撤销旧token。连接缺少send_nonce的旧后端时保留注册凭据展示，显示服务版本
+不兼容提示且不提供发送输入框，不能静默复用旧编号。
+
+永久入口 `tests/smoke.spec.ts` T9/T10，以及显式连接自有隔离服务的
+`tests/basic/verify_session_intents.py`；录屏、trace和失败截图默认关闭，避免
+保存真实输入的恢复凭据。Playwright报告/结果由CHAT_TEST_ARTIFACTS选择仓外
+目录，默认D:/autostack/plan-artifacts/auto-chat-tests。

@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 0
+current_step: 1
 total_steps: 4
 base_branch: main
 base_commit: 378a7f2fb99eb2f8954f13ec73ae2d4346ec20da
@@ -61,7 +61,7 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
 
 ## 8. 任务清单
 
-- [ ] T00(work)：纯.at后端前缀与前端新意图/缺前缀拒绝，永久复现测试。
+- [x] T00(work)：纯.at后端前缀与前端新意图/缺前缀拒绝，永久复现测试。实际C01 8断言、Vue T5/T9/T10 3通过，原生和最终artifact审查仍待T01/T02。
 - [ ] T01(work)：C01..04实际双端/数据库控制，Spec更新，冻结提交。
 - [ ] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。
 - [ ] T03(merge)：push、归档、消费hold与清理回执，OS054更新固定pin。
@@ -74,3 +74,7 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
 ## 10. 待决事项
 
 无；原生054整体验收和独立最终复审仍由父计划承担。
+
+- stage: work | plan_id: CHAT-003 | plan_revision: r1 | round: 1 | outcome: T00 passed; native pending | next: work/T01
+  .at additive auth response send_nonce independently generated before repository register/login; failed auth clears it; UI assigns new prefix/resetseq, logout clears, missing prefix hides composer and displays compatibility error while retaining registration secret banner. Retry path unchanged. Real generated Rust backend prepare exit0/1m54s. First auto run cold backend exceeded existing120s readiness window; owned children absent afterward, then explicit Cargo preparation completed, retry uses same now-built profile and becomes ready; not treated as a test pass from timeout.
+  Owner service17827 PID28972/Vite3414 PID32148 are isolated CHAT_DATA_DIR plan003/data/chat, CHAT_TEST_MODE=1, no legacy mode. C01 permanent Python response contract8assertions pass; first harness incorrectly parsed void logout as JSON, corrected without weakening payload assertions. Vue permanent smoke T5 offline/retry, T9 new page/recovery/next message/full reload, T10 response missing nonce all3passed/8.7s, session-intents-playwright.log. Windows .cmd grep quoting rejected before tests; final uses direct Node Playwright CLI, not a hidden skip. Playwright artifacts are outside checkout; trace/video/failure screenshot disabled to avoid credentials. No native task or app delivery/push claimed.

@@ -16,7 +16,7 @@
 //   或 f-string 后再拼（musk secretary_helpers 先例）。
 // - 送达：已鉴权按会话轮询（1s RefreshTick，双轨一致；CHAT-002 移除公开
 //   SSE 单总线——私聊载荷不得投给任意连接）。client_msg_id 只由
-//   seq+my_id 构成，绝不含 token（F-1：元数据会回给对端）。
+//   登录响应独立send_nonce+seq+my_id构成，绝不含 token（F-1：元数据会回给对端）。
 // - 发送状态机：pending（sending/failed）→ 应答 ok 落定；失败保留文本可重发；
 //   重试复用同一 client_msg_id（服务器 UNIQUE 去重，已确认消息不重复落库）。
 // - 会话隔离：消息按 conversation_id 请求/过滤；切换会话即切换数据源。
@@ -45,6 +45,7 @@ store ChatStore {
         var typing_until int = 0
         var search_query str = ""
         var show_conv_list bool = true
+        var send_nonce str = ""
         var send_seq int = 0
     }
 
@@ -74,6 +75,10 @@ store ChatStore {
                                 .my_name = m.name
                                 .my_avatar = m.avatar
                                 .my_token = m.token
+                                .send_nonce = ""
+                                if m.send_nonce { .send_nonce = m.send_nonce }
+                                .send_seq = 0
+                                if .send_nonce == "" { .login_error = "服务版本不兼容：请更新后端后重新登录" }
                                 .online = true
                                 .login_secret = ""
                             } else {
@@ -109,6 +114,10 @@ store ChatStore {
                             .my_name = m.name
                             .my_avatar = m.avatar
                             .my_token = m.token
+                                .send_nonce = ""
+                                if m.send_nonce { .send_nonce = m.send_nonce }
+                                .send_seq = 0
+                                if .send_nonce == "" { .login_error = "服务版本不兼容：请更新后端后重新登录" }
                             .show_secret = m.secret
                             .online = true
                             .login_secret = ""
@@ -142,6 +151,7 @@ store ChatStore {
             .my_name = ""
             .my_avatar = ""
             .my_token = ""
+            .send_nonce = ""
             .active_contact_id = ""
             .active_peer_name = ""
             .active_peer_avatar = ""
@@ -231,8 +241,8 @@ store ChatStore {
         .SendText(text) -> {
             if text != "" {
                 if .my_token != "" {
-                    if .active_contact_id != "" {
-                        var cid str = "cm-" + .send_seq.to_string() + "-" + .my_id
+                    if .active_contact_id != "" && .send_nonce != "" {
+                        var cid str = "cm-" + .send_nonce + "-" + .send_seq.to_string() + "-" + .my_id
                         .send_seq = .send_seq + 1
                         var esc_new str = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\n")
                         var p_new = json.parse("{\"client_msg_id\":\"" + cid + "\",\"text\":\"" + esc_new + "\",\"state\":\"sending\"}")

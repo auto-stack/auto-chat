@@ -38,9 +38,9 @@ auto run -r vm
 
 ## 计划与开发
 
-[路线图](docs/roadmap-v0.6.md) · [当前后续计划002](docs/plans/002-standalone-identity-and-isolation.md) · [AutoOS基础总表](https://github.com/auto-stack/auto-os/blob/main/docs/plans/b-apps-basic-capabilities.md)
+[路线图](docs/roadmap-v0.6.md) · [身份交付002](docs/plans/archived/002-standalone-identity-and-isolation.md) · [重开消息修复003](docs/plans/003-session-message-intent-identity.md) · [AutoOS基础总表](https://github.com/auto-stack/auto-os/blob/main/docs/plans/b-apps-basic-capabilities.md)
 
-开发、计划与顺序复审使用 `D:/autostack/auto-chat` 独立 clone 的 main。当前只准备计划/README/roadmap并推送；不实现、不更新 AutoOS 子模块，后续由统一集成计划登记精确交付版本。Linux 等发行版 Nix＋COSMIC 基础；跨应用通讯另排。
+开发、计划与顺序复审使用 `D:/autostack/auto-chat` 独立 clone 的 main。CHAT-003由AutoOS PLAN-054真实验收反例触发，实施和复审顺序使用本clone；交付后由统一集成计划登记精确组合版本。Linux 等发行版 Nix＋COSMIC 基础；跨应用通讯另排。
 
 ## 来源与组合
 

@@ -22,6 +22,7 @@ use api: Message
 use api: SendResult
 
 use repository
+use auto.rand
 
 // ═══════════════════════════════════════════════════════════
 // 身份与登录
@@ -29,17 +30,29 @@ use repository
 
 /// 注册（CHAT-002 T-02）：列序 {ok, err, id, name, avatar, secret, token}。
 pub fn register(name str) RegisterResult {
+    var nonce str = rand.secure_hex(32)
+    if nonce == "" {
+        var rejected RegisterResult = RegisterResult { ok: false, err: "entropy-failed", id: "", name: "", avatar: "", secret: "", token: "", send_nonce: "" }
+        return rejected
+    }
     var row List<str> = repository.register_row(name)
     var ok bool = row[0] == "1"
-    var r RegisterResult = RegisterResult { ok: ok, err: row[1], id: row[2], name: row[3], avatar: row[4], secret: row[5], token: row[6] }
+    if ok == false { nonce = "" }
+    var r RegisterResult = RegisterResult { ok: ok, err: row[1], id: row[2], name: row[3], avatar: row[4], secret: row[5], token: row[6], send_nonce: nonce }
     return r
 }
 
 /// 登录/恢复：列序 {ok, err, id, name, avatar, token}。
 pub fn login(name str, secret str) LoginResult {
+    var nonce str = rand.secure_hex(32)
+    if nonce == "" {
+        var rejected LoginResult = LoginResult { ok: false, err: "entropy-failed", id: "", name: "", avatar: "", token: "", send_nonce: "" }
+        return rejected
+    }
     var row List<str> = repository.login_row(name, secret)
     var ok bool = row[0] == "1"
-    var r LoginResult = LoginResult { ok: ok, err: row[1], id: row[2], name: row[3], avatar: row[4], token: row[5] }
+    if ok == false { nonce = "" }
+    var r LoginResult = LoginResult { ok: ok, err: row[1], id: row[2], name: row[3], avatar: row[4], token: row[5], send_nonce: nonce }
     return r
 }
 

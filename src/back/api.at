@@ -27,6 +27,7 @@ pub type RegisterResult = {
     avatar: str
     secret: str
     token: str
+    send_nonce: str
 }
 
 /// POST /api/login 应答（CHAT-002）：name + secret 恢复；token 仅随本响应交付。
@@ -37,6 +38,7 @@ pub type LoginResult = {
     name: str
     avatar: str
     token: str
+    send_nonce: str
 }
 
 /// POST /api/legacy/adopt 应答（CHAT-002）：受控旧身份恢复，一次性铸发新凭据。
