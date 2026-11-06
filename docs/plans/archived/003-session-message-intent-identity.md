@@ -1,12 +1,12 @@
 ---
 plan_id: CHAT-003
-status: reviewed
+status: archived
 feature_name: 重开后新消息与失败重试编号隔离
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 3
+current_step: 4
 total_steps: 4
 base_branch: main
 base_commit: 378a7f2fb99eb2f8954f13ec73ae2d4346ec20da
@@ -64,7 +64,7 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
 - [x] T00(work)：纯.at后端前缀与前端新意图/缺前缀拒绝，永久复现测试。实际C01 8断言、Vue T5/T9/T10 3通过，原生和最终artifact审查仍待T01/T02。
 - [x] T01(work)：C01..04实际双端/数据库控制，Spec更新，冻结提交。原生r5失败气泡→恢复→点击重发保留原key且只增一行，确切边界/哈希见round3。
 - [x] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。待MX01修复后当前基线复审；同实施上下文，非独立，不能替代054最终独立复审。
-- [ ] T03(merge)：push、归档、消费hold与清理回执，OS054更新固定pin。
+- [x] T03(merge)：push、归档、消费hold与清理回执；应用交付提交供OS054更新固定pin，其实际消费验收由父计划T03/T04负责，未冒充已通过。
 
 ## 9. 复审记录
 
@@ -116,3 +116,6 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
   Final frozen gate: C01 response8 assertions pass; all10 Playwright smoke cases pass/28.2s on stricter fixture and isolated final-gate-r155 data. frozen-message-union-final.log SHA674a6b02ac4cfdb2723c38dc1026fb8b868e9d3caed61dd7cc4c85c8ecbab667. No pending/ignored case and no waived MX01. Production Vue pnpm build exit0, vue-tsc + Vite662modules/5.16s, generated dist index159.86kB JS/19.92kB CSS. Latest native1ae9764a06dedcb5dfe6e11407baf47effb360d2128e0e2e34a643fd11ffeaec was built/tested under UI8774; dependency framework delivery remains parent-owned.
   All CHAT003 owned services stopped: final backend30960 own POST/__auto/shutdown202 drainingtrue, retained handle exit0 and17827 listener absent; owner dev CLI49892 cancellation terminal1, own child48536/32148/24892 absent and3414 listener absent (not claimed normal0). Deliberate fixture fault backends28972/25340/5640 exit-1 retained as fault evidence. Credential workers46904/82088 cleared and exited0; parent054 workers separate. Generated untracked .auto/ui-cache.json ordinary owned file removed, clone clean.
   Named unresolved hold OS054-CHAT003-CONSUMER recorded in registry policy.json and chat-owned-scope.json exact ownership manifest; excludes foreign auto-database namespace and preserves its existing hold. Parent fixed-pin/full native union and independent final review not complete; retain only manifest-owned scratch/generated outputs for that consumption, no independent clone deletion. Production artifact observation: OS candidate source378a release backend810cb780f8aebc16c6b2c79987dc22fb201f84fe63c9421d4d37885730789bac built2026-11-06 before CHAT003 remains stale/live42272; parent T03 must gracefully stop, rebuild fixed-pin release and restart before native acceptance. New app Rust debug backend has passed C01/union/native; no claim that old running release contains nonce fix. No release dependency artifact was changed by this app-only source commit.
+
+- stage: merge | plan_id: CHAT-003 | plan_revision: r1 | checkpoint: archived, cleaned | outcome: pass | completion_kind: delivered
+  Delivery c4b0238 pushed to origin/main after verified final affected gate. Reviewed implementation/tests/Spec unchanged; canonical SHAa4dc2b009c6b0ac3f756ba25a58a7555af89b1206ee43b43757021944af2d1f8. Actual tracked archive docs/plans/archived/003-session-message-intent-identity.md, archived4/4, README reference updated. No app worktree or temporary branch was created under approved independent clone/main workflow, hence no worktree removal; clone retained. All owned untracked tracked-scope cache removed; only named parent-consumer hold remains in local registry, foreign namespace untouched. Evidence summaries above are durable, raw ownership manifest d67ced4c129295e7494b1c32972f5bf72dc67a00b6d652db425351110f2de5bf. App same-context final review does not replace parent independent review. Parent must consume final pushed archive descendant and rebuild/start production Rust backend; stale artifact observation remains explicit above. Auto-lang batch due gate is not applicable to this app repository (no language crate changes).
