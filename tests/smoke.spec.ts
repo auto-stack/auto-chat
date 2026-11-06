@@ -78,8 +78,9 @@ function composerInput(page: Page) {
 async function openConversationWith(page: Page, peer: string) {
   // 侧栏「联系人」区点击对方身份（触发 conversations/open）
   await page.locator(`text=${peer}`).last().click()
-  // 会话头出现对方名字
-  await page.locator(`text=${peer}`).first().waitFor({ timeout: 8000 })
+  // Sidebar text is already present before the asynchronous open completes.
+  // Wait for the actual thread title so SendText has an active conversation.
+  await expect(page.locator('.text-base.font-bold').filter({ hasText: peer })).toHaveText(peer, { timeout: 8000 })
 }
 
 test.beforeEach(async () => {
@@ -165,13 +166,19 @@ test('T5: 断网发送呈现失败态且可恢复重发（V-02）', async ({ bro
   const page = await ctx.newPage()
   await claimIdentity('乙')
   await login(page, '甲')
+  await page.route('**/api/conversations/open', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    await route.continue()
+  })
   await openConversationWith(page, '乙')
 
   // 注入网络故障：所有发送请求中止
-  await page.route('**/api/messages', route => route.abort())
+  let abortedSends = 0
+  await page.route('**/api/messages', route => { abortedSends++; return route.abort() })
   const marker = `断线消息${Date.now()}`
   await composerInput(page).fill(marker)
   await page.getByRole('button', { name: '发送' }).click()
+  await expect.poll(() => abortedSends, { timeout: 8000 }).toBeGreaterThan(0)
   // 失败气泡出现
   await expect(page.locator('text=发送失败 · 点击重发')).toBeVisible({ timeout: 8000 })
   // 不伪造回复：不得出现成功气泡样式（同一文本无 bg-primary 气泡）
@@ -270,7 +277,19 @@ test('T9: 重开恢复后第一条新消息不与旧意图碰撞', async ({ brow
   await page.reload()
   await login(page, '恢复甲')
   await openConversationWith(page, '恢复乙')
-  await expect(page.getByText('重开后新意图8.125', { exact: true })).toHaveCount(1)
+  // The sidebar preview legitimately repeats the latest text. Count actual
+  // sent bubbles, then independently verify persisted history as the peer.
+  await expect(page.locator('.bg-primary.text-primary-foreground').filter({ hasText: '重开后新意图8.125' })).toHaveCount(1)
+  const peerToken = await claimToken('恢复乙')
+  const senderId = await peerIdByName('恢复甲')
+  const contactsResponse = await fetch(`${API}/api/contacts?token=${encodeURIComponent(peerToken)}`)
+  const contacts = await contactsResponse.json() as { id: string; peer_id: string }[]
+  const conversation = contacts.find(c => c.peer_id === senderId)
+  expect(Boolean(conversation)).toBe(true)
+  const historyResponse = await fetch(`${API}/api/messages?token=${encodeURIComponent(peerToken)}&conversation_id=${encodeURIComponent(conversation!.id)}`)
+  const history = await historyResponse.json() as { text: string }[]
+  expect(history.filter(m => m.text === '重开前第一条54.25').length).toBe(1)
+  expect(history.filter(m => m.text === '重开后新意图8.125').length).toBe(1)
   await ctx.close()
 })
 

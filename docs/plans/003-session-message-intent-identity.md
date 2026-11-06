@@ -1,12 +1,12 @@
 ---
 plan_id: CHAT-003
-status: reviewed
+status: execution_done
 feature_name: 重开后新消息与失败重试编号隔离
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 3
+current_step: 2
 total_steps: 4
 base_branch: main
 base_commit: 378a7f2fb99eb2f8954f13ec73ae2d4346ec20da
@@ -63,7 +63,7 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
 
 - [x] T00(work)：纯.at后端前缀与前端新意图/缺前缀拒绝，永久复现测试。实际C01 8断言、Vue T5/T9/T10 3通过，原生和最终artifact审查仍待T01/T02。
 - [x] T01(work)：C01..04实际双端/数据库控制，Spec更新，冻结提交。原生r5失败气泡→恢复→点击重发保留原key且只增一行，确切边界/哈希见round3。
-- [x] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。final app artifact pass@69b093b；同实施上下文，非独立，不能替代054最终独立复审。
+- [ ] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。待MX01修复后当前基线复审；同实施上下文，非独立，不能替代054最终独立复审。
 - [ ] T03(merge)：push、归档、消费hold与清理回执，OS054更新固定pin。
 
 ## 9. 复审记录
@@ -97,3 +97,12 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
   Reconstructed from committed diff + actual oracle JSON/hashes + inspected public frames, not merely executor status. App-rule independent clone exception honored, only main tree listed, no tracked implementation drift; .auto is generated untracked runtime cache and not delivered. Sources5b9725f, subsequent docs-only; dependency Lang23f3a031/Man03bb65ef/UI8774c1c8 with hostc035; formal native1ae metadata/source inputs three-way match. Auth response independent secure_hex call and nonce-empty return precede repository invocation in both register/login; failed auth clears nonce. No schema/membership/send/read source changes (repository.at exact base equality). No token-derived IDs or new credential RNG. Input-level typed params, response extras and old-backend missing/null field path cover actual two profiles.
   AC01→T00/C01 pass: actual response8 assertions plus static rejection-before-repository ordering for newly added nonce RNG failure; OS entropy injection not executed or claimed. AC02→T01/C02/C03 pass: Vue T5/T9, native normal close/reopen two different prefixes with seq0, native observed failed bubble→backend recovery→actual pointer retry preserves exact original seq2 key/text/sender and adds one row, final normal bubble and no duplicate after settle. AC03→C04/auth/privacy pass: Vue missing-field control + actual native old-backend error/no composer, scoped reuse of unchanged repository AB/C isolation from054r151, data preserved, secret/token artifact audit boundary explicitly recorded. AC04 implementation/Spec/docs ready: canonical Spec a4dc2b009c6b0ac3f756ba25a58a7555af89b1206ee43b43757021944af2d1f8 matches current tree, README links and delta reflect current behavior; touched_goals empty because this repairs existing app semantics with no registered new goal IDs. Publication/archive/consumer pin are merge-owned, not falsely marked done here.
   Review reconstruction artifact review-reconstruction.json records the same69b baseline and verified oracle hashes. No implementation/Spec edits during review. Remaining merge gate: frozen affected auth/message/composer UI union (all10 smoke cases are justified by shared auth response/new-intent composer gating) + C01 on a newly isolated owned test backend; repository migration/legacy machinery and language full suites unchanged/out of this gate. Parent054 production backend lifetime, mixed/failure union, UI060/949 actual landing and independent final review remain parent-owned open criteria; this pass grants no parent completion or upstream framework delivery. Named parent-consumer retention will be recorded before app closeout. No outstanding work-owned finding is moved into debt.
+
+- stage: merge | plan_id: CHAT-003 | plan_revision: r1 | round: 4 | outcome: needs_fix | finding: MX01 | next: work/T01 scoped fixture diagnosis
+  Frozen gate C01 again8passed; full affected auth/message UI10-case union on new isolated data returned9pass/1fail/33.2s. T5 lacked expected failed bubble; gate NOT waived or archived. Owned backend30960 runs explicit existing development service config at17827 with fresh data/final-gate-r155 and CHAT_TEST_MODE=1, ready identitysvc-30960-18e55da711c602c8. Earlier manual recovery5640 intentionally ended exit-1 as fixture cleanup (not a normal production-release pass), native evidence data/chat preserved, other backend42272/Blog42120 alive.
+  MX01 diagnosis entry: helper openConversationWith clicks peer then waits first peer text, which may already be the sidebar rather than loaded thread. Source OpenIdentity sets active ID only after async POST returns; SendText drops without active ID. Failed DOM context shows connected empty thread/no pending, so no proof that intended send reached the active-conversation branch. Correctness requirement is unchanged: actual active conversation + aborted POST must produce failed bubble and manual retry. Before calling this a product failure, run deterministic open-response delay with counted aborted send requests, then bind readiness to actual thread heading. Retain9 passing cases and native/API/source proofs; reopen T01/T02 only for fixture repair/review. New baseline will include test changes; original69b review is historical, not blanket pass for changed tests.
+
+- stage: work | plan_id: CHAT-003 | plan_revision: r1 | round: 5 | outcome: execution_done (MX01 fixture repair) | next: affected review/T02
+  Deterministic legitimate control delays conversations/open response1000ms. With original helper, counted aborted-send requests remained0 and test failed before the intended HTTP-failure branch (fixture-conversation-red.log); confirms the sidebar-name wait did not establish active conversation. Corrected shared helper waits actual thread title .text-base.font-bold with exact peer text. T5 retains same failed-bubble/manual-retry assertions and8s budgets, adds positive aborted-request count, no skip/timeout weakening.
+  Targeted T5 then passed; T9 exposed second fixture oracle error: whole-page exact text count2 includes legitimate sidebar last-message preview. Actual DB showed old and new message counts1 each. T9 now counts actual sent bubbles and independently reads peer contacts/history with legitimate peer login; no API message/conversation prewrite. Both persisted old/new texts must each occur exactly1. Final T5/T9 both2passed/8.7s (fixture-conversation-final.log). Old partial fixture-green run1pass/1fail retained, not counted as final green. Product source/API/SDK/Spec unchanged from69b baseline; native retry/reopen/C04 and C01 evidence reused under that explicit unchanged boundary.
+  Final merge union must run again after affected review on committed fixture baseline; no archive or push claimed while gate was red. Existing global plan003 also contains independently held auto-database namespace; no root deletion permitted. Chat-owned top-level files/directories will have an explicit ownership manifest and OS054-CHAT003-CONSUMER hold until parent054 independent review/final gates, without touching auto-database or its hold.
