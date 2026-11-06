@@ -1,12 +1,12 @@
 ---
 plan_id: CHAT-003
-status: execution_done
+status: reviewed
 feature_name: 重开后新消息与失败重试编号隔离
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 2
+current_step: 3
 total_steps: 4
 base_branch: main
 base_commit: 378a7f2fb99eb2f8954f13ec73ae2d4346ec20da
@@ -63,7 +63,7 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
 
 - [x] T00(work)：纯.at后端前缀与前端新意图/缺前缀拒绝，永久复现测试。实际C01 8断言、Vue T5/T9/T10 3通过，原生和最终artifact审查仍待T01/T02。
 - [x] T01(work)：C01..04实际双端/数据库控制，Spec更新，冻结提交。原生r5失败气泡→恢复→点击重发保留原key且只增一行，确切边界/哈希见round3。
-- [ ] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。待MX01修复后当前基线复审；同实施上下文，非独立，不能替代054最终独立复审。
+- [x] T02(review)：绑定当前修订/提交的最终artifact复审，限制作实声明。待MX01修复后当前基线复审；同实施上下文，非独立，不能替代054最终独立复审。
 - [ ] T03(merge)：push、归档、消费hold与清理回执，OS054更新固定pin。
 
 ## 9. 复审记录
@@ -106,3 +106,7 @@ register/login响应分别新增send_nonce str，不删除旧字段；旧客户�
   Deterministic legitimate control delays conversations/open response1000ms. With original helper, counted aborted-send requests remained0 and test failed before the intended HTTP-failure branch (fixture-conversation-red.log); confirms the sidebar-name wait did not establish active conversation. Corrected shared helper waits actual thread title .text-base.font-bold with exact peer text. T5 retains same failed-bubble/manual-retry assertions and8s budgets, adds positive aborted-request count, no skip/timeout weakening.
   Targeted T5 then passed; T9 exposed second fixture oracle error: whole-page exact text count2 includes legitimate sidebar last-message preview. Actual DB showed old and new message counts1 each. T9 now counts actual sent bubbles and independently reads peer contacts/history with legitimate peer login; no API message/conversation prewrite. Both persisted old/new texts must each occur exactly1. Final T5/T9 both2passed/8.7s (fixture-conversation-final.log). Old partial fixture-green run1pass/1fail retained, not counted as final green. Product source/API/SDK/Spec unchanged from69b baseline; native retry/reopen/C04 and C01 evidence reused under that explicit unchanged boundary.
   Final merge union must run again after affected review on committed fixture baseline; no archive or push claimed while gate was red. Existing global plan003 also contains independently held auto-database namespace; no root deletion permitted. Chat-owned top-level files/directories will have an explicit ownership manifest and OS054-CHAT003-CONSUMER hold until parent054 independent review/final gates, without touching auto-database or its hold.
+
+- stage: review | review_scope: affected final app artifact re-review | reviewer_identity: same Codex implementation context (not independent) | plan_id: CHAT-003 | plan_revision: r1 | outcome: pass | worktree_path: D:/autostack/auto-chat | branch: main | reviewed_commit: a53e95989b2c8f96dd2a8b69fb994403d9ce653b | base_commit: 378a7f2fb99eb2f8954f13ec73ae2d4346ec20da | next: merge/T03 frozen union
+  MX01 fully traced: controlled1000ms delay before releasing the open request exposes old fixture's aborted-send count0. New thread-heading exact wait establishes source active ID; positive abort-count assertion ensures intended fault branch executes, original failed/retry oracles/timeouts unchanged. T9 whole-DOM text counted sidebar preview plus bubble; actual DB already1+1. New actual sent-bubble scope plus independent authenticated peer GET contacts/messages requires exactly one persisted old/new text, no API message writes in that oracle. Targeted T5/T9 both pass8.7s; source diff since reviewed69b is exactly test fixture + Plan, all product/API/SDK/native evidence inputs unchanged, Spec SHAa4dc unchanged. Original AC01..04 map retained, only repaired fixture portion replaced. No product defect waived as pre-existing or hidden by a timeout increase.
+  Implementation/test source committed at this baseline, .auto generated cache only. No new full native/API campaign needed for a selector/oracle repair; merge owns rerun of the full10 affected UI cases on this stricter fixture and C01 response8, bound to frozen source and configuration. Prior9/1 gate remains red history; no archive/publication permitted until this new union passes. Parent054 independent final review remains open; app same-context pass does not grant it.
